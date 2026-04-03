@@ -70,8 +70,8 @@
     .stickBase, .stickKnob { position:absolute; border-radius:50%; transform:translate(-50%,-50%); }
     .stickBase { width:104px; height:104px; background:rgba(255,255,255,0.10); border:2px solid rgba(255,255,255,0.20); box-shadow:0 0 0 2px rgba(0,0,0,0.24) inset; display:block; }
     .stickKnob { width:48px; height:48px; background:rgba(255,178,122,0.34); border:2px solid rgba(255,178,122,0.62); display:block; }
-    .actionCluster { position:fixed; z-index:25; right:calc(env(safe-area-inset-right, 0px) + 72px); bottom:calc(env(safe-area-inset-bottom, 0px) + 8px); width:236px; height:236px; pointer-events:none; }
-    .dragButton { position:absolute; width:64px; height:64px; border-radius:50%; background:rgba(34,27,24,0.88); border:2px solid rgba(255,255,255,0.18); color:#f0e6d8; display:flex; align-items:center; justify-content:center; text-align:center; font-size:11px; line-height:1.05; pointer-events:auto; touch-action:none; box-shadow:0 0 0 2px rgba(0,0,0,0.24) inset; }
+    .actionCluster { position:fixed; inset:0; z-index:25; pointer-events:none; }
+    .dragButton { position:fixed; width:64px; height:64px; border-radius:50%; background:rgba(34,27,24,0.88); border:2px solid rgba(255,255,255,0.18); color:#f0e6d8; display:flex; align-items:center; justify-content:center; text-align:center; font-size:11px; line-height:1.05; pointer-events:auto; touch-action:none; box-shadow:0 0 0 2px rgba(0,0,0,0.24) inset; }
     .dragButton small { display:block; opacity:0.72; font-size:9px; margin-top:1px; }
     .dragButton.dragging { border-color:#ffb27a; box-shadow:0 0 0 3px rgba(255,178,122,0.2); }
     .dragLine { position:absolute; inset:0; pointer-events:none; }
@@ -141,6 +141,14 @@
       .fsButton { height:30px; font-size:9px; min-width:84px; }
     }
 
+
+    .layoutDevBtn { position:fixed; right:calc(env(safe-area-inset-right, 0px) + 10px); top:calc(env(safe-area-inset-top, 0px) + 10px); z-index:40; pointer-events:auto; min-width:88px; height:32px; padding:0 10px; border-radius:999px; background:rgba(12,10,10,0.86); border:1px solid rgba(255,255,255,0.16); color:#f0e6d8; font:inherit; font-size:11px; }
+    .layoutDevPanel { position:fixed; left:50%; top:calc(env(safe-area-inset-top, 0px) + 10px); transform:translateX(-50%); z-index:41; display:none; gap:8px; align-items:center; padding:8px 10px; border-radius:12px; background:rgba(12,10,10,0.92); border:1px solid rgba(255,255,255,0.14); color:#f0e6d8; pointer-events:auto; }
+    .layoutDevPanel.active { display:flex; }
+    .layoutDevPanel button { padding:6px 10px; font-size:11px; }
+    .layoutDragTarget.layoutEditing { outline:2px dashed rgba(255,178,122,0.85); outline-offset:3px; }
+    .layoutDragTarget.draggingLayout { outline:2px solid rgba(120,220,255,0.95); outline-offset:3px; }
+
 </style>
 </head>
 <body class="mobile-only">
@@ -177,15 +185,23 @@
 </div>
 
 <div class="tip" id="tip">Mobile landscape HTML build</div>
+<button class="layoutDevBtn" id="layoutDevBtn">Layout Edit</button>
+<div class="layoutDevPanel" id="layoutDevPanel">
+  <span id="layoutDevLabel">Layout Edit ON</span>
+  <button id="layoutSaveBtn">Save</button>
+  <button id="layoutResetBtn">Reset</button>
+  <button id="layoutDoneBtn">Done</button>
+</div>
+
 
 <div class="mobileHud active" id="mobileHud">
   
-  <div class="joystickZone left" id="moveZone">
+  <div class="joystickZone left layoutDragTarget" id="moveZone" data-layout-key="moveZone">
     <div class="joystickCenter" id="moveCenter"></div>
     <div class="stickBase" id="moveBase"></div>
     <div class="stickKnob" id="moveKnob"></div>
   </div>
-  <div class="joystickZone right" id="aimZone">
+  <div class="joystickZone right layoutDragTarget" id="aimZone" data-layout-key="aimZone">
     <div class="joystickCenter" id="aimCenter"></div>
     <div class="stickBase" id="aimBase"></div>
     <div class="stickKnob" id="aimKnob"></div>
@@ -197,9 +213,9 @@
         <line id="dragLinePath" x1="0" y1="0" x2="0" y2="0" stroke="rgba(255,178,122,0.9)" stroke-width="1.5" stroke-linecap="round" visibility="hidden"></line>
       </svg>
     </div>
-    <div class="dragButton" id="dashBtn" style="left:6px; top:104px;">ROLL<small>tap</small></div>
-    <div class="dragButton" id="grenadeBtn" style="left:68px; top:26px;">GRENADE<small>drag</small></div>
-    <div class="dragButton" id="molotovBtn" style="left:146px; top:86px;">FIRE<small>drag</small></div>
+    <div class="dragButton layoutDragTarget" id="dashBtn" data-layout-key="dashBtn" style="left:calc(100vw - env(safe-area-inset-right, 0px) - 150px); top:calc(100vh - env(safe-area-inset-bottom, 0px) - 190px);">ROLL<small>tap</small></div>
+    <div class="dragButton layoutDragTarget" id="grenadeBtn" data-layout-key="grenadeBtn" style="left:calc(100vw - env(safe-area-inset-right, 0px) - 230px); top:calc(100vh - env(safe-area-inset-bottom, 0px) - 270px);">GRENADE<small>drag</small></div>
+    <div class="dragButton layoutDragTarget" id="molotovBtn" data-layout-key="molotovBtn" style="left:calc(100vw - env(safe-area-inset-right, 0px) - 84px); top:calc(100vh - env(safe-area-inset-bottom, 0px) - 320px);">FIRE<small>drag</small></div>
   </div>
 </div>
 <div class="rotateNotice" id="rotateNotice"><div class="cardLite"><h2 style="margin:0 0 10px;">Rotate Device</h2><p style="margin:0;line-height:1.6;">This version is designed for landscape mobile play. Rotate your phone horizontally to continue.</p></div></div>
@@ -219,7 +235,7 @@ function resize(){
   updateOrientationNotice();
   updateFullscreenButton();
 }
-addEventListener('resize',resize);
+addEventListener('resize',()=>{ resize(); applyLayoutPositions(); updateOrientationNotice(); });
 
 const T={
   en:{kills:'Kills',score:'Score',hp:'HP',ammo:'Ammo',weapon:'Weapon',reserve:'Reserve',grenades:'Throwables',time:'Time',wave:'Wave',best:'Best',shotgun:'Shotgun',gatling:'Gatling',rocket:'Rocket Launcher',flamethrower:'Flamethrower',reload:'Reloading',title:'DEAD TOWN',desc:'Survive zombie waves, collect airdrops, and use throwables to control space. Bosses appear over time. Mobile landscape only · Left stick Move · Right stick Aim/Shoot · Tap Roll · Drag Grenade / Fire Bomb to aim throw landing.',tip:'Mobile landscape HTML build',start1:'A dead town has been overrun by endless infected. You are one of the last survivors still fighting.',start2:'This is a zombie horde PvE survival game focused on fast combat, crowd clearing, and weapon drops. Co-op may come in a future version.',start3:'Tap Start to begin',startBtn:'Start',returnMenu:'Return to main menu',dead:'YOU DIED',survive:'Survived',restart:'Restart',mainMenu:'Main Menu',boss:'Boss has spawned!',airdrop:'Airdrop incoming!',bossHp:'Boss HP',paused:'PAUSED',pauseHint:'Press P or Esc to resume',pauseLabel:'P / Esc Pause',loading:'Initializing signal...',loadingReady:'Signal locked. Opening menu...',serumDamage:'Serum acquired: +10% Damage',serumSpeed:'Serum acquired: +5% Speed',fullscreen:'Fullscreen'},
@@ -243,12 +259,11 @@ function updateResponsiveUI(){
   const stickSize=Math.round(clampNumber(shortEdge*0.24,88,118));
   const knobSize=Math.round(stickSize*0.46);
   const zoneSize=Math.round(stickSize*1.55);
-  const actionSize=Math.round(clampNumber(shortEdge*0.46,168,228));
-  const btnSize=Math.round(clampNumber(shortEdge*0.14,50,68));
-  const leftInset=Math.round(clampNumber(SW*0.018,8,18));
-  const rightInset=Math.round(clampNumber(SW*0.018,8,18));
-  const bottomInset=Math.round(clampNumber(SH*0.025,6,14));
-  const clusterGap=Math.round(btnSize*0.18);
+  const actionSize=Math.round(clampNumber(shortEdge*0.44,172,240));
+  const btnSize=Math.round(clampNumber(shortEdge*0.13,48,64));
+  const leftInset=Math.round(clampNumber(SW*0.02,10,22));
+  const rightInset=Math.round(clampNumber(SW*0.022,10,24));
+  const bottomInset=Math.round(clampNumber(SH*0.03,8,18));
   const moveZone=$('moveZone'), aimZone=$('aimZone'), cluster=$('actionCluster');
   if(moveZone){
     moveZone.style.width=zoneSize+'px';
@@ -256,30 +271,41 @@ function updateResponsiveUI(){
     moveZone.style.left='calc(env(safe-area-inset-left, 0px) + '+leftInset+'px)';
     moveZone.style.bottom='calc(env(safe-area-inset-bottom, 0px) + '+bottomInset+'px)';
   }
-  const centerOffset=Math.max(0, Math.round((actionSize-zoneSize)*0.5));
+  const aimRightInset=rightInset;
+  const aimBottomInset=bottomInset;
   if(aimZone){
     aimZone.style.width=zoneSize+'px';
     aimZone.style.height=zoneSize+'px';
-    aimZone.style.right='calc(env(safe-area-inset-right, 0px) + '+rightInset+'px)';
-    aimZone.style.bottom='calc(env(safe-area-inset-bottom, 0px) + '+bottomInset+'px)';
+    aimZone.style.right='calc(env(safe-area-inset-right, 0px) + '+aimRightInset+'px)';
+    aimZone.style.bottom='calc(env(safe-area-inset-bottom, 0px) + '+aimBottomInset+'px)';
   }
+  const clusterW=Math.round(zoneSize + btnSize*1.9);
+  const clusterH=Math.round(zoneSize + btnSize*1.9);
   if(cluster){
-    cluster.style.width=actionSize+'px';
-    cluster.style.height=actionSize+'px';
-    cluster.style.right='calc(env(safe-area-inset-right, 0px) + '+Math.max(0,rightInset-centerOffset)+'px)';
-    cluster.style.bottom='calc(env(safe-area-inset-bottom, 0px) + '+Math.max(0,bottomInset-centerOffset)+'px)';
+    cluster.style.width=clusterW+'px';
+    cluster.style.height=clusterH+'px';
+    cluster.style.right='calc(env(safe-area-inset-right, 0px) + '+Math.max(0, aimRightInset - btnSize*0.45)+'px)';
+    cluster.style.bottom='calc(env(safe-area-inset-bottom, 0px) + '+Math.max(0, aimBottomInset - btnSize*0.55)+'px)';
   }
   document.querySelectorAll('.stickBase').forEach(el=>{el.style.width=stickSize+'px';el.style.height=stickSize+'px';});
   document.querySelectorAll('.stickKnob').forEach(el=>{el.style.width=knobSize+'px';el.style.height=knobSize+'px';});
-  const cx=actionSize*0.5, cy=actionSize*0.5, radius=actionSize*0.37;
+  const aimCenterX=Math.round(clusterW - zoneSize*0.5 - btnSize*0.28);
+  const aimCenterY=Math.round(clusterH - zoneSize*0.5 - btnSize*0.32);
   const dashBtn=$('dashBtn'), grenadeBtn=$('grenadeBtn'), molotovBtn=$('molotovBtn');
-  [[dashBtn,Math.PI*1.22],[grenadeBtn,Math.PI*0.86],[molotovBtn,Math.PI*0.50]].forEach(([btn,ang])=>{
+  const buttonLayouts=[
+    [dashBtn, aimCenterX - btnSize*1.62, aimCenterY - btnSize*0.62],
+    [grenadeBtn, aimCenterX - btnSize*0.95, aimCenterY - btnSize*1.85],
+    [molotovBtn, aimCenterX + btnSize*0.38, aimCenterY - btnSize*1.42]
+  ];
+  buttonLayouts.forEach(([btn,left,top])=>{
     if(!btn) return;
-    btn.style.width=btnSize+'px'; btn.style.height=btnSize+'px';
+    btn.style.width=btnSize+'px';
+    btn.style.height=btnSize+'px';
     btn.style.fontSize=Math.max(8,Math.round(btnSize*0.18))+'px';
-    const small=btn.querySelector('small'); if(small) small.style.fontSize=Math.max(7,Math.round(btnSize*0.13))+'px';
-    btn.style.left=Math.round(cx+Math.cos(ang)*radius-btnSize/2)+'px';
-    btn.style.top=Math.round(cy+Math.sin(ang)*radius-btnSize/2)+'px';
+    const small=btn.querySelector('small');
+    if(small) small.style.fontSize=Math.max(7,Math.round(btnSize*0.13))+'px';
+    btn.style.left=Math.round(left)+'px';
+    btn.style.top=Math.round(top)+'px';
   });
 }
 function enterFullscreen(){ return false; }
@@ -298,6 +324,53 @@ const touchState={
   aimAngle:0,
   shootHeld:false
 };
+const layoutStorageKey='deadtown_mobile_layout_v1';
+const defaultLayout={
+  moveZone:{left:'calc(env(safe-area-inset-left, 0px) + 8px)', bottom:'calc(env(safe-area-inset-bottom, 0px) + 8px)', right:'auto', top:'auto'},
+  aimZone:{right:'calc(env(safe-area-inset-right, 0px) + 96px)', bottom:'calc(env(safe-area-inset-bottom, 0px) + 8px)', left:'auto', top:'auto'},
+  dashBtn:{left:'calc(100vw - env(safe-area-inset-right, 0px) - 150px)', top:'calc(100vh - env(safe-area-inset-bottom, 0px) - 190px)', right:'auto', bottom:'auto'},
+  grenadeBtn:{left:'calc(100vw - env(safe-area-inset-right, 0px) - 230px)', top:'calc(100vh - env(safe-area-inset-bottom, 0px) - 270px)', right:'auto', bottom:'auto'},
+  molotovBtn:{left:'calc(100vw - env(safe-area-inset-right, 0px) - 84px)', top:'calc(100vh - env(safe-area-inset-bottom, 0px) - 320px)', right:'auto', bottom:'auto'}
+};
+const layoutEdit={enabled:false,dragging:null,offsetX:0,offsetY:0,positions:{}};
+function cloneDefaultLayout(){return JSON.parse(JSON.stringify(defaultLayout));}
+function loadLayoutPositions(){
+  layoutEdit.positions=cloneDefaultLayout();
+  try{const saved=JSON.parse(localStorage.getItem(layoutStorageKey)||'null'); if(saved&&typeof saved==='object'){for(const k of Object.keys(layoutEdit.positions)){if(saved[k]) Object.assign(layoutEdit.positions[k], saved[k]);}}}catch(e){}
+}
+function saveLayoutPositions(){ localStorage.setItem(layoutStorageKey, JSON.stringify(layoutEdit.positions)); }
+function resetLayoutPositions(){ layoutEdit.positions=cloneDefaultLayout(); applyLayoutPositions(); saveLayoutPositions(); }
+function applyLayoutPositions(){
+  for(const [id,pos] of Object.entries(layoutEdit.positions)){
+    const el=$(id); if(!el) continue;
+    ['left','right','top','bottom'].forEach(key=>{ el.style[key]=pos[key] ?? 'auto'; });
+  }
+  updateTouchVisuals(); syncAimCursor();
+}
+function syncLayoutEditUI(){
+  const btn=$('layoutDevBtn'), panel=$('layoutDevPanel');
+  if(btn) btn.textContent=layoutEdit.enabled ? 'Editing' : 'Layout Edit';
+  if(panel) panel.classList.toggle('active', layoutEdit.enabled);
+  document.querySelectorAll('.layoutDragTarget').forEach(el=>el.classList.toggle('layoutEditing', layoutEdit.enabled));
+}
+function setLayoutEditEnabled(v){ layoutEdit.enabled=!!v; if(v){ resetMoveStick(); resetAimStick(); clearActionButton(); } layoutEdit.dragging=null; syncLayoutEditUI(); }
+function clampLayoutWithinScreen(el,left,top){
+  const rect=el.getBoundingClientRect();
+  const maxLeft=Math.max(0, window.innerWidth-rect.width-4), maxTop=Math.max(0, window.innerHeight-rect.height-4);
+  return {left:Math.max(4, Math.min(left, maxLeft)), top:Math.max(4, Math.min(top, maxTop))};
+}
+function beginLayoutDrag(target,clientX,clientY){
+  const rect=target.getBoundingClientRect();
+  layoutEdit.dragging=target; layoutEdit.offsetX=clientX-rect.left; layoutEdit.offsetY=clientY-rect.top; target.classList.add('draggingLayout');
+}
+function moveLayoutDrag(clientX,clientY){
+  const target=layoutEdit.dragging; if(!target) return;
+  const key=target.dataset.layoutKey; if(!key) return;
+  const pos=clampLayoutWithinScreen(target, clientX-layoutEdit.offsetX, clientY-layoutEdit.offsetY);
+  layoutEdit.positions[key]={left:pos.left+'px', top:pos.top+'px', right:'auto', bottom:'auto'};
+  applyLayoutPositions();
+}
+function endLayoutDrag(){ if(layoutEdit.dragging){ layoutEdit.dragging.classList.remove('draggingLayout'); layoutEdit.dragging=null; saveLayoutPositions(); } }
 const SELF_EXPLOSIVE_DAMAGE_MULT=0.125;
 const ROCKET_JUMP_DURATION=0.5;
 const ROCKET_JUMP_BASE_SPEED=420;
@@ -837,17 +910,24 @@ function bindMobileControls(){
   }
 
   moveZone.addEventListener('touchstart',e=>{
+    if(layoutEdit.enabled||state.loading||state.paused||state.gameOver) return;
     const t=e.changedTouches[0];
     beginMoveTouch(t);
     e.preventDefault();
   },{passive:false});
   aimZone.addEventListener('touchstart',e=>{
+    if(layoutEdit.enabled||state.loading||state.paused||state.gameOver) return;
     const t=e.changedTouches[0];
     beginAimTouch(t);
     e.preventDefault();
   },{passive:false});
 
   function handleGlobalMove(e){
+    if(layoutEdit.enabled){
+      const t=(e.touches&&e.touches[0])||(e.changedTouches&&e.changedTouches[0]);
+      if(layoutEdit.dragging&&t){ moveLayoutDrag(t.clientX,t.clientY); e.preventDefault(); }
+      return;
+    }
     let handled=false;
     const moveTouch=getTouchById(e.touches,touchState.move.id) || getTouchById(e.changedTouches||[],touchState.move.id);
     if(moveTouch && touchState.move.active){
@@ -884,6 +964,7 @@ function bindMobileControls(){
   }
 
   function handleGlobalEnd(e){
+    if(layoutEdit.enabled){ if(layoutEdit.dragging){ endLayoutDrag(); e.preventDefault(); } return; }
     let handled=false;
     if(getTouchById(e.changedTouches||[],touchState.move.id)){
       resetMoveStick();
@@ -905,6 +986,7 @@ function bindMobileControls(){
     const btn=$(id);
     if(!btn) return;
     btn.addEventListener('touchstart',e=>{
+      if(layoutEdit.enabled){ beginLayoutDrag(btn, e.changedTouches[0].clientX, e.changedTouches[0].clientY); e.preventDefault(); return; }
       const t=e.changedTouches[0];
       touchState.action={id:t.identifier,kind,startX:t.clientX,startY:t.clientY,x:t.clientX,y:t.clientY,dx:0,dy:0,button:btn,worldX:player.x,worldY:player.y};
       btn.classList.add('dragging');
@@ -916,7 +998,7 @@ function bindMobileControls(){
   const dashBtn=$('dashBtn');
   if(dashBtn && !dashBtn.dataset.boundTap){
     dashBtn.dataset.boundTap='1';
-    dashBtn.addEventListener('touchstart',e=>{ startDashByCurrentDirection(); e.preventDefault(); },{passive:false});
+    dashBtn.addEventListener('touchstart',e=>{ if(layoutEdit.enabled){ beginLayoutDrag(dashBtn, e.changedTouches[0].clientX, e.changedTouches[0].clientY); e.preventDefault(); return; } startDashByCurrentDirection(); e.preventDefault(); },{passive:false});
   }
   bindDragButton('grenadeBtn','grenade');
   bindDragButton('molotovBtn','molotov');
@@ -1387,6 +1469,17 @@ function loop(now){
   requestAnimationFrame(loop);
 }
 bindMobileControls();
+function bindLayoutEditor(){
+  loadLayoutPositions();
+  applyLayoutPositions();
+  const devBtn=$('layoutDevBtn'), doneBtn=$('layoutDoneBtn'), saveBtn=$('layoutSaveBtn'), resetBtn=$('layoutResetBtn');
+  if(devBtn) devBtn.onclick=()=>setLayoutEditEnabled(!layoutEdit.enabled);
+  if(doneBtn) doneBtn.onclick=()=>setLayoutEditEnabled(false);
+  if(saveBtn) saveBtn.onclick=()=>{ saveLayoutPositions(); setLayoutEditEnabled(false); };
+  if(resetBtn) resetBtn.onclick=()=>resetLayoutPositions();
+}
+
+bindLayoutEditor();
 updateOrientationNotice();
 addEventListener('resize',updateOrientationNotice);
 applyLang();
