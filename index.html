@@ -3,16 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="theme-color" content="#0a0a0a" />
-  <meta name="mobile-web-app-capable" content="yes" />
   <title>Dead Town By Cedrrriiiccc</title>
   <style>
     * { box-sizing: border-box; image-rendering: pixelated; }
     html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#0a0a0a; font-family:"Courier New",monospace; color:#f0e6d8; }
     body { position:fixed; inset:0; min-height:100dvh; min-height:100svh; -webkit-text-size-adjust:100%; overscroll-behavior:none; }
-    canvas { position:fixed; inset:0; display:block; width:100%; height:100%; background:#0a0a0a; cursor:default; }
+    canvas { display:block; width:100vw; height:100dvh; height:100svh; background:#0a0a0a; cursor:default; }
     .hud { position:fixed; top:calc(env(safe-area-inset-top, 0px) + 8px); left:calc(env(safe-area-inset-left, 0px) + 8px); right:auto; bottom:auto; display:flex !important; gap:0; z-index:24; pointer-events:none; }
     .panel { background:rgba(12,10,10,0.88); border:2px solid rgba(255,255,255,0.12); padding:10px 12px; box-shadow:0 0 0 2px rgba(0,0,0,0.35) inset; pointer-events:auto; }
     .stats { display:grid; grid-template-columns:repeat(5,minmax(78px,auto)); gap:8px 14px; min-width:580px; }
@@ -38,7 +34,7 @@
     button:hover { background:#30231d; }
     #restartBtn { margin-top:0; }
     .creditWrap { display:flex; flex-direction:column; align-items:center; gap:10px; margin:10px 0 6px; }
-    .creditAvatar { width:72px; height:72px; image-rendering:pixelated; border:3px solid rgba(255,255,255,0.16); background:#101018; box-shadow:0 0 0 3px rgba(0,0,0,0.35) inset; }
+    .creditAvatar { width:96px; height:96px; image-rendering:pixelated; border:3px solid rgba(255,255,255,0.16); background:#101018; box-shadow:0 0 0 3px rgba(0,0,0,0.35) inset; }
   
     .loadingOverlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:
       radial-gradient(circle at 50% 40%, rgba(20,20,20,0.6), rgba(0,0,0,0.98) 60%),
@@ -67,14 +63,14 @@
     body.mobile-only { touch-action:none; overscroll-behavior:none; }
     .mobileHud { position:fixed; inset:0; z-index:25; pointer-events:none; display:none; }
     .mobileHud.active { display:block; }
-    .joystickZone { position:fixed; z-index:24; bottom:calc(env(safe-area-inset-bottom, 0px) + 12px); width:132px; height:132px; pointer-events:auto; touch-action:none; }
+    .joystickZone { position:fixed; z-index:24; bottom:calc(env(safe-area-inset-bottom, 0px) + 12px); width:34vw; max-width:250px; height:46vh; max-height:220px; pointer-events:auto; touch-action:none; }
     .joystickCenter { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:1px; height:1px; }
     .joystickZone.left { left:calc(env(safe-area-inset-left, 0px) + 10px); }
-    .joystickZone.right { right:calc(env(safe-area-inset-right, 0px) + 172px); }
+    .joystickZone.right { right:calc(env(safe-area-inset-right, 0px) + 116px); }
     .stickBase, .stickKnob { position:absolute; border-radius:50%; transform:translate(-50%,-50%); }
     .stickBase { width:104px; height:104px; background:rgba(255,255,255,0.10); border:2px solid rgba(255,255,255,0.20); box-shadow:0 0 0 2px rgba(0,0,0,0.24) inset; display:block; }
     .stickKnob { width:48px; height:48px; background:rgba(255,178,122,0.34); border:2px solid rgba(255,178,122,0.62); display:block; }
-    .actionCluster { position:fixed; z-index:25; right:calc(env(safe-area-inset-right, 0px) + 18px); bottom:calc(env(safe-area-inset-bottom, 0px) + 8px); width:220px; height:220px; pointer-events:none; }
+    .actionCluster { position:fixed; z-index:25; right:calc(env(safe-area-inset-right, 0px) + 72px); bottom:calc(env(safe-area-inset-bottom, 0px) + 8px); width:236px; height:236px; pointer-events:none; }
     .dragButton { position:absolute; width:64px; height:64px; border-radius:50%; background:rgba(34,27,24,0.88); border:2px solid rgba(255,255,255,0.18); color:#f0e6d8; display:flex; align-items:center; justify-content:center; text-align:center; font-size:11px; line-height:1.05; pointer-events:auto; touch-action:none; box-shadow:0 0 0 2px rgba(0,0,0,0.24) inset; }
     .dragButton small { display:block; opacity:0.72; font-size:9px; margin-top:1px; }
     .dragButton.dragging { border-color:#ffb27a; box-shadow:0 0 0 3px rgba(255,178,122,0.2); }
@@ -86,7 +82,7 @@
     .rotateNotice.active { display:flex; }
     .rotateNotice .cardLite { max-width:420px; border:2px solid rgba(255,255,255,0.12); padding:22px; background:rgba(16,10,10,0.92); }
     .fsButton {
-      position:fixed; top:calc(env(safe-area-inset-top, 0px) + 10px); right:calc(env(safe-area-inset-right, 0px) + 12px); left:auto; transform:none;
+      position:fixed; top:calc(env(safe-area-inset-top, 0px) + 10px); left:50%; transform:translateX(-50%);
       z-index:26; pointer-events:auto; display:flex; align-items:center; justify-content:center;
       min-width:96px; height:34px; padding:0 12px; border-radius:999px;
       background:rgba(12,10,10,0.84); border:1px solid rgba(255,255,255,0.16); color:#f0e6d8;
@@ -183,7 +179,7 @@
 <div class="tip" id="tip">Mobile landscape HTML build</div>
 
 <div class="mobileHud active" id="mobileHud">
-  <div class="mobileHint active" id="mobileHint">Landscape mobile controls enabled</div>
+  
   <div class="joystickZone left" id="moveZone">
     <div class="joystickCenter" id="moveCenter"></div>
     <div class="stickBase" id="moveBase"></div>
@@ -194,7 +190,7 @@
     <div class="stickBase" id="aimBase"></div>
     <div class="stickKnob" id="aimKnob"></div>
   </div>
-  <button class="fsButton" id="fsBtn">FULLSCREEN</button>
+  
   <div class="actionCluster" id="actionCluster">
     <div class="dragLine" id="dragLine">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -213,31 +209,21 @@
 const canvas=document.getElementById('game');
 const ctx=canvas.getContext('2d',{alpha:false});
 let SW=innerWidth,SH=innerHeight;
-function viewportSize(){
-  const vv=window.visualViewport;
-  return {
-    w: Math.max(1, Math.round(vv ? vv.width : window.innerWidth || document.documentElement.clientWidth || 1)),
-    h: Math.max(1, Math.round(vv ? vv.height : window.innerHeight || document.documentElement.clientHeight || 1))
-  };
-}
 function resize(){
-  const dpr=Math.max(1,Math.min(3,window.devicePixelRatio||1));
-  const vp=viewportSize();
-  SW=vp.w;SH=vp.h;
+  const dpr=Math.max(1,window.devicePixelRatio||1);
+  SW=innerWidth;SH=innerHeight;
   canvas.width=Math.floor(SW*dpr);canvas.height=Math.floor(SH*dpr);
-  canvas.style.width='100%';canvas.style.height='100%';
+  canvas.style.width=SW+'px';canvas.style.height=SH+'px';
   ctx.setTransform(dpr,0,0,dpr,0,0);
   updateResponsiveUI();
   updateOrientationNotice();
   updateFullscreenButton();
-  updateTouchVisuals();
 }
 addEventListener('resize',resize);
-if(window.visualViewport){ window.visualViewport.addEventListener('resize',resize); window.visualViewport.addEventListener('scroll',resize); }
 
 const T={
-  en:{kills:'Kills',score:'Score',hp:'HP',ammo:'Ammo',weapon:'Weapon',reserve:'Reserve',grenades:'Throwables',time:'Time',wave:'Wave',best:'Best',shotgun:'Shotgun',gatling:'Gatling',rocket:'Rocket Launcher',flamethrower:'Flamethrower',reload:'Reloading',title:'DEAD TOWN',desc:'Survive zombie waves, collect airdrops, and use throwables to control space. Bosses appear over time. Mobile landscape only · Left stick Move · Right stick Aim/Shoot · Drag buttons for Roll, Grenade, and Fire Bomb.',tip:'Mobile landscape HTML build',start1:'A dead town has been overrun by endless infected. You are one of the last survivors still fighting.',start2:'This is a zombie horde PvE survival game focused on fast combat, crowd clearing, and weapon drops. Co-op may come in a future version.',start3:'Tap Start to begin',startBtn:'Start',returnMenu:'Return to main menu',dead:'YOU DIED',survive:'Survived',restart:'Restart',mainMenu:'Main Menu',boss:'Boss has spawned!',airdrop:'Airdrop incoming!',bossHp:'Boss HP',paused:'PAUSED',pauseHint:'Press P or Esc to resume',pauseLabel:'P / Esc Pause',loading:'Initializing signal...',loadingReady:'Signal locked. Opening menu...',serumDamage:'Serum acquired: +10% Damage',serumSpeed:'Serum acquired: +5% Speed',fullscreen:'Fullscreen'},
-  zh:{kills:'击杀',score:'分数',hp:'生命',ammo:'子弹',weapon:'武器',reserve:'备弹',grenades:'投掷物',time:'时间',wave:'波次',best:'最高分',shotgun:'霰弹枪',gatling:'加特林',rocket:'火箭发射器',flamethrower:'喷火器',reload:'换弹中',title:'DEAD TOWN',desc:'在尸潮中生存，拾取空投武器，用投掷物控制范围。Boss 会随时间出现。仅支持手机横屏 · 左摇杆移动 · 右摇杆瞄准并射击 · 拖拽按钮释放翻滚/手榴弹/燃烧弹。',tip:'手机横屏 HTML 版本',start1:'一座死城已被无尽感染者吞没，而你是仍在战斗的幸存者之一。',start2:'这是一款以高速战斗、割草清怪和武器空投为核心的丧尸题材 PVE 生存游戏，未来也许会加入多人合作模式。',start3:'点击开始按钮进入游戏（建议手机横屏）',startBtn:'开始游戏',returnMenu:'返回主菜单',dead:'你死了',survive:'存活',restart:'重新开始',mainMenu:'主菜单',boss:'Boss 已出现！',airdrop:'空投已抵达！',bossHp:'Boss生命',paused:'已暂停',pauseHint:'按 P 或 Esc 继续',pauseLabel:'P / Esc 暂停',loading:'正在初始化信号...',loadingReady:'信号稳定，正在打开菜单...',serumDamage:'已获得血清：伤害 +10%',serumSpeed:'已获得血清：移速 +5%',fullscreen:'全屏'}
+  en:{kills:'Kills',score:'Score',hp:'HP',ammo:'Ammo',weapon:'Weapon',reserve:'Reserve',grenades:'Throwables',time:'Time',wave:'Wave',best:'Best',shotgun:'Shotgun',gatling:'Gatling',rocket:'Rocket Launcher',flamethrower:'Flamethrower',reload:'Reloading',title:'DEAD TOWN',desc:'Survive zombie waves, collect airdrops, and use throwables to control space. Bosses appear over time. Mobile landscape only · Left stick Move · Right stick Aim/Shoot · Tap Roll · Drag Grenade / Fire Bomb to aim throw landing.',tip:'Mobile landscape HTML build',start1:'A dead town has been overrun by endless infected. You are one of the last survivors still fighting.',start2:'This is a zombie horde PvE survival game focused on fast combat, crowd clearing, and weapon drops. Co-op may come in a future version.',start3:'Tap Start to begin',startBtn:'Start',returnMenu:'Return to main menu',dead:'YOU DIED',survive:'Survived',restart:'Restart',mainMenu:'Main Menu',boss:'Boss has spawned!',airdrop:'Airdrop incoming!',bossHp:'Boss HP',paused:'PAUSED',pauseHint:'Press P or Esc to resume',pauseLabel:'P / Esc Pause',loading:'Initializing signal...',loadingReady:'Signal locked. Opening menu...',serumDamage:'Serum acquired: +10% Damage',serumSpeed:'Serum acquired: +5% Speed',fullscreen:'Fullscreen'},
+  zh:{kills:'击杀',score:'分数',hp:'生命',ammo:'子弹',weapon:'武器',reserve:'备弹',grenades:'投掷物',time:'时间',wave:'波次',best:'最高分',shotgun:'霰弹枪',gatling:'加特林',rocket:'火箭发射器',flamethrower:'喷火器',reload:'换弹中',title:'DEAD TOWN',desc:'在尸潮中生存，拾取空投武器，用投掷物控制范围。Boss 会随时间出现。仅支持手机横屏 · 左摇杆移动 · 右摇杆瞄准并射击 · 点击翻滚 · 拖拽手雷/燃烧弹显示落点并投掷。',tip:'手机横屏 HTML 版本',start1:'一座死城已被无尽感染者吞没，而你是仍在战斗的幸存者之一。',start2:'这是一款以高速战斗、割草清怪和武器空投为核心的丧尸题材 PVE 生存游戏，未来也许会加入多人合作模式。',start3:'点击开始按钮进入游戏（建议手机横屏）',startBtn:'开始游戏',returnMenu:'返回主菜单',dead:'你死了',survive:'存活',restart:'重新开始',mainMenu:'主菜单',boss:'Boss 已出现！',airdrop:'空投已抵达！',bossHp:'Boss生命',paused:'已暂停',pauseHint:'按 P 或 Esc 继续',pauseLabel:'P / Esc 暂停',loading:'正在初始化信号...',loadingReady:'信号稳定，正在打开菜单...',serumDamage:'已获得血清：伤害 +10%',serumSpeed:'已获得血清：移速 +5%',fullscreen:'全屏'}
 };
 let lang='en';
 const $=id=>document.getElementById(id);
@@ -294,48 +280,10 @@ function updateResponsiveUI(){
     btn.style.left=Math.round(cx+Math.cos(ang)*radius-btnSize/2)+'px';
     btn.style.top=Math.round(cy+Math.sin(ang)*radius-btnSize/2)+'px';
   });
-  const fsBtn=$('fsBtn');
-  if(fsBtn){
-    fsBtn.style.top='calc(env(safe-area-inset-top, 0px) + '+Math.round(clampNumber(SH*0.018,8,14))+'px)';
-  }
 }
-function isStandaloneIOS(){
-  return !!(window.navigator && window.navigator.standalone);
-}
-async function enterFullscreen(){
-  const root=document.documentElement;
-  try{
-    if(document.fullscreenElement) return true;
-    if(root.requestFullscreen){
-      await root.requestFullscreen({navigationUI:'hide'});
-      return true;
-    }
-    if(root.webkitRequestFullscreen){
-      root.webkitRequestFullscreen();
-      return true;
-    }
-  }catch(err){}
-  if(isStandaloneIOS()) return true;
-  const ua=navigator.userAgent||'';
-  if(/iPhone|iPad|iPod/i.test(ua)){
-    alert('Safari 标签页里通常不能真正全屏。请点分享 → 添加到主屏幕，然后从主屏幕打开游戏。');
-  }
-  return false;
-}
-function updateFullscreenButton(){
-  const fsBtn=$('fsBtn');
-  if(!fsBtn) return;
-  fsBtn.textContent = isStandaloneIOS() ? 'FULLSCREEN ON' : 'FULLSCREEN';
-  fsBtn.classList.remove('hidden');
-}
-function bindFullscreenButton(){
-  const fsBtn=$('fsBtn');
-  if(!fsBtn || fsBtn.dataset.bound) return;
-  fsBtn.dataset.bound='1';
-  fsBtn.addEventListener('click', ()=>{ enterFullscreen(); }, {passive:true});
-  fsBtn.addEventListener('touchstart', ()=>{ enterFullscreen(); }, {passive:true});
-  document.addEventListener('fullscreenchange', updateFullscreenButton);
-}
+function enterFullscreen(){ return false; }
+function updateFullscreenButton(){}
+function bindFullscreenButton(){}
 
 const WORLD={w:3600,h:2400,road:[],buildings:[]};
 const state={running:false,gameOver:false,paused:false,loading:true,loadProgress:0,loadDone:false,vhsTime:0,mouse:{x:SW/2,y:SH/2},keys:new Set(),pellets:[],zombies:[],particles:[],decals:[],pickups:[],grenades:[],explosions:[],airdrops:[],rockets:[],flameParticles:[],fireZones:[],damageTexts:[],wave:1,kills:0,score:0,surviveTime:0,spawnTimer:0,waveTimer:0,screenFlash:0,cameraShake:0,best:Number(0),bossSpawned:false,bossAnnouncement:0,airdropAnnouncement:0,buffAnnouncement:'',buffAnnouncementTimer:0,airdropTimer:35,deathAnim:0,time:0,nextBossTime:90,nextEntityId:1,playerName:localStorage.getItem('dead_town_player_name')||'Player'};
@@ -345,7 +293,7 @@ const MOBILE_ONLY=true;
 const touchState={
   move:{id:null,active:false,startX:0,startY:0,x:0,y:0,dx:0,dy:0},
   aim:{id:null,active:false,startX:0,startY:0,x:0,y:0,dx:0,dy:0},
-  action:{id:null,kind:null,startX:0,startY:0,x:0,y:0,dx:0,dy:0,button:null},
+  action:{id:null,kind:null,startX:0,startY:0,x:0,y:0,dx:0,dy:0,button:null,worldX:0,worldY:0},
   aimAngle:0,
   shootHeld:false
 };
@@ -389,11 +337,10 @@ $('lKills').textContent=t.kills;$('lScore').textContent=t.score;$('lHp').textCon
 if(!state.running&&!state.gameOver){$('overlayCard').className='card mobileMenuCard';$('overlayCard').innerHTML=`<h2 class="glitchTitle" data-text="${t.title}">${t.title}</h2><div class="creditWrap"><img class="creditAvatar" loading="eager" decoding="sync" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAABICAYAAABV7bNHAAAACXBIWXMAAAsSAAALEgHS3X78AAABbElEQVR4nO3YwQnCMBRF0dfQxB10E3YTdBN2E3QTdhN0E3aT3uYfBZH9rqx8uxk4mN+EKk5JkiRJkiRJkqQp4x7vH2s7d9h2v6k9+0r7E0qP4wz1k9k2dW1wqQ6t3H+7iVn2p9dJ2bC7g5G1Q8Y9k1vP4J6sOe5dG9vHhR5s3mRrW2r4kP6dW2b4b0m2bJr+3QWvJwZr1lX3m0UuW0u5tNwq9k7Jgq3k9k6y3U0s9q6dV2rI0j7r8d1x4J7l3m0QfK2uQj0M3m7jQ9w6m2bLJ+Qb7m5k4xL0b2bW1m3mQ0xkq7Yw2q7m8Yx0w7e8t4g6g7f7x3hD3Q7zKQ5Z7m5mR6V4s8gq3l8M2bK1m2m9Q0mT0V3k7n4m1m1m0Tn8g9K4xY2l2Qm9TQH+X5IkSZIkSZIk6QX8A1lZ6rj0H5hSAAAAAElFTkSuQmCC" alt="Cedric avatar"><p style="opacity:0.72;margin:0;">Created by <span class="accent">CEDRRRIIICCC</span></p><p class="compactNote">ChatGPT assisted build · V1.0.4</p></div><p class="menuInfo">${lang==='zh'?'手机横屏版。左摇杆移动，右摇杆瞄准并自动射击。右侧按钮拖拽后松手释放。':'Mobile landscape build. Left stick to move, right stick to aim and auto-fire. Drag the right-side buttons and release to use.'}</p><p class="compactNote">${lang==='zh'?'Safari 里可能不是完全真全屏，但现在可以直接点 Start 测试。':'Safari may still show browser bars, but Start is now always reachable for testing.'}</p><p style="opacity:0.8;margin:4px 0 10px;">Name: <span class="accent">${state.playerName}</span></p><div class="menuActions"><button id="startBtn">${t.startBtn}</button><button id="renameBtn">${lang==='zh'?'修改名字':'Change Name'}</button><button id="fsMenuBtn">${lang==='zh'?'全屏':'Fullscreen'}</button></div>`;$('overlay').classList.remove('hidden');setTimeout(()=>{const renameBtn=$('renameBtn'); if(renameBtn) renameBtn.onclick=()=>promptPlayerName(); const startBtn=$('startBtn'); if(startBtn) startBtn.onclick=()=>resetGame(); const fsMenuBtn=$('fsMenuBtn'); if(fsMenuBtn) fsMenuBtn.onclick=()=>enterFullscreen();},0);}
 else if(state.gameOver){$('overlayCard').className='card';$('overlayCard').innerHTML=`<h2>${t.dead}</h2><p>${t.score}: <span class="accent">${Math.floor(state.score)}</span></p><p>${t.kills}: <span class="accent">${state.kills}</span></p><p>${t.survive}: <span class="accent">${Math.floor(state.surviveTime)} s</span></p><p>${t.best}: <span class="accent">${state.best}</span></p><div class="controls" style="justify-content:center;margin-top:12px;"><button id="restartBtn">${t.restart}</button><button id="menuBtn">${t.mainMenu}</button></div>`;setTimeout(()=>{const btn=$('restartBtn'); if(btn) btn.onclick=()=>resetGame(); const menuBtn=$('menuBtn'); if(menuBtn) menuBtn.onclick=()=>goToMainMenu();},0);}
 const hint=$('mobileHint'); if(hint) hint.textContent=lang==='zh'?'手机横屏操作已启用':'Landscape mobile controls enabled';
-const dashBtn=$('dashBtn'), grenadeBtn=$('grenadeBtn'), molotovBtn=$('molotovBtn'), fsBtn=$('fsBtn');
-if(dashBtn) dashBtn.innerHTML=lang==='zh'?'翻滚<small>拖拽</small>':'ROLL<small>drag</small>';
-if(grenadeBtn) grenadeBtn.innerHTML=lang==='zh'?'手雷<small>拖拽</small>':'GRENADE<small>drag</small>';
-if(molotovBtn) molotovBtn.innerHTML=lang==='zh'?'燃烧弹<small>拖拽</small>':'FIRE<small>drag</small>';
-if(fsBtn) fsBtn.textContent=T[lang].fullscreen || (lang==='zh'?'全屏':'Fullscreen');
+const dashBtn=$('dashBtn'), grenadeBtn=$('grenadeBtn'), molotovBtn=$('molotovBtn');
+if(dashBtn) dashBtn.innerHTML=lang==='zh'?'翻滚<small>点击</small>':'ROLL<small>tap</small>';
+if(grenadeBtn) grenadeBtn.innerHTML=lang==='zh'?'手雷<small>拖拽瞄准</small>':'GRENADE<small>drag aim</small>';
+if(molotovBtn) molotovBtn.innerHTML=lang==='zh'?'燃烧弹<small>拖拽瞄准</small>':'FIRE<small>drag aim</small>';
 updateHUD();updateLoadingUI();updateResponsiveUI();updateFullscreenButton();}
 $('langBtn').onclick=()=>{lang=lang==='en'?'zh':'en';applyLang();updateCursorVisibility();};
 function promptPlayerName(){
@@ -724,54 +671,255 @@ function worldToScreen(wx,wy,cam){return{x:wx-cam.x,y:wy-cam.y};}
 
 
 function getZoneCenter(zoneId){
-  const base = zoneId==='aimZone' ? $('aimBase') : $('moveBase');
-  const rect = base ? base.getBoundingClientRect() : null;
-  if(rect) return {x: rect.left + rect.width/2, y: rect.top + rect.height/2};
-  return zoneId==='aimZone' ? {x: SW*0.76, y: SH*0.78} : {x: SW*0.16, y: SH*0.78};
+  const zone=$(zoneId);
+  if(!zone) return {x:SW*0.2,y:SH*0.75};
+  const rect=zone.getBoundingClientRect();
+  return {x:rect.left+rect.width*0.5,y:rect.top+rect.height*0.5};
+}
+function getZoneLocalCenter(zoneId){
+  const zone=$(zoneId);
+  if(!zone) return {x:64,y:64};
+  const rect=zone.getBoundingClientRect();
+  return {x:rect.width*0.5,y:rect.height*0.5};
 }
 function setStickVisual(baseEl,knobEl,active,startX,startY,dx,dy,maxRadius,zoneId){
   if(!baseEl||!knobEl) return;
-  const center=getZoneCenter(zoneId);
+  const center=getZoneLocalCenter(zoneId);
   baseEl.style.display='block';
   knobEl.style.display='block';
   baseEl.style.left=center.x+'px';
   baseEl.style.top=center.y+'px';
   knobEl.style.left=(center.x+(active?dx:0))+'px';
   knobEl.style.top=(center.y+(active?dy:0))+'px';
-  knobEl.style.opacity=active?'1':'0.9';
+  knobEl.style.opacity=active?'1':'0.88';
+}
+function startDashByCurrentDirection(){
+  let dx=touchState.move.dx, dy=touchState.move.dy;
+  if(Math.hypot(dx,dy)<10){
+    dx=Math.cos(touchState.aimAngle||0)*40;
+    dy=Math.sin(touchState.aimAngle||0)*40;
+    if(Math.hypot(dx,dy)<10){ dx=(player.faceDir||1)*40; dy=0; }
+  }
+  startDashFromVector(dx,dy);
+}
+function updateActionPreview(){
+  if(!touchState.action.kind || touchState.action.kind==='dash') return;
+  const kind=touchState.action.kind;
+  let dx=touchState.action.dx, dy=touchState.action.dy;
+  const maxDist=kind==='molotov'?420:340;
+  const d=Math.hypot(dx,dy)||1;
+  if(d>maxDist){ dx=dx/d*maxDist; dy=dy/d*maxDist; }
+  touchState.action.worldX=clamp(player.x+dx*3.2,10,WORLD.w-10);
+  touchState.action.worldY=clamp(player.y+dy*3.2,10,WORLD.h-10);
 }
 function setActionLine(action){
   const line=$('dragLinePath'), cluster=$('actionCluster');
   if(!line||!cluster) return;
-  if(!action || !action.kind){ line.setAttribute('visibility','hidden'); return; }
+  if(!action || !action.kind){
+    line.setAttribute('visibility','hidden');
+    return;
+  }
   const rect=cluster.getBoundingClientRect();
-  const x1=((action.startX-rect.left)/rect.width)*100; const y1=((action.startY-rect.top)/rect.height)*100;
-  const x2=((action.x-rect.left)/rect.width)*100; const y2=((action.y-rect.top)/rect.height)*100;
-  line.setAttribute('x1',x1); line.setAttribute('y1',y1); line.setAttribute('x2',x2); line.setAttribute('y2',y2); line.setAttribute('visibility','visible');
+  const x1=((action.startX-rect.left)/rect.width)*100;
+  const y1=((action.startY-rect.top)/rect.height)*100;
+  const x2=((action.x-rect.left)/rect.width)*100;
+  const y2=((action.y-rect.top)/rect.height)*100;
+  line.setAttribute('x1',x1);
+  line.setAttribute('y1',y1);
+  line.setAttribute('x2',x2);
+  line.setAttribute('y2',y2);
+  line.setAttribute('visibility','visible');
 }
-function updateTouchVisuals(){ setStickVisual($('moveBase'),$('moveKnob'),touchState.move.active,0,0,touchState.move.dx,touchState.move.dy,54,'moveZone'); setStickVisual($('aimBase'),$('aimKnob'),touchState.aim.active,0,0,touchState.aim.dx,touchState.aim.dy,54,'aimZone'); setActionLine(touchState.action); }
-function getTouchById(list,id){ for(const t of list||[]) if(t.identifier===id) return t; return null; }
-function resetMoveStick(){ touchState.move={id:null,active:false,startX:0,startY:0,x:0,y:0,dx:0,dy:0}; updateTouchVisuals(); }
-function resetAimStick(){ touchState.aim={id:null,active:false,startX:0,startY:0,x:0,y:0,dx:0,dy:0}; touchState.shootHeld=false; updateTouchVisuals(); }
-function clearActionButton(){ if(touchState.action.button) touchState.action.button.classList.remove('dragging'); touchState.action={id:null,kind:null,startX:0,startY:0,x:0,y:0,dx:0,dy:0,button:null}; setActionLine(null); }
-function startDashFromVector(dx,dy){ const len=Math.hypot(dx,dy); if(player.dashCooldown>0 || len<14) return; const nx=dx/len, ny=dy/len; player.dashCooldown=1.3; player.dashTime=0.18; const dashSpeed=460; player.dashVX=nx*dashSpeed; player.dashVY=ny*dashSpeed; player.dashFacing=Math.atan2(ny,nx); player.dashSpinDir=nx<0?-1:1; if(nx<0) player.faceDir=-1; else if(nx>0) player.faceDir=1; playDash(); }
-function throwThrowableAt(kind,targetX,targetY){ const isMolotov=kind==='molotov'; if(isMolotov&&player.molotovs<=0)return; if(!isMolotov&&player.grenades<=0)return; let dx=targetX-player.x,dy=targetY-player.y; const maxDist=isMolotov?420:340; const d=Math.hypot(dx,dy)||1; if(d>maxDist){dx=dx/d*maxDist;dy=dy/d*maxDist;} const finalX=clamp(player.x+dx,10,WORLD.w-10),finalY=clamp(player.y+dy,10,WORLD.h-10); if(isMolotov)player.molotovs--;else player.grenades--; state.grenades.push({type:isMolotov?'molotov':'grenade',x:player.x,y:player.y,startX:player.x,startY:player.y,targetX:finalX,targetY:finalY,progress:0,timer:isMolotov?0.82:0.95,total:isMolotov?0.82:0.95,radius:5,arc:isMolotov?62:54,drawX:player.x,drawY:player.y,height:0}); }
-function syncAimCursor(){ const magnitude=Math.hypot(touchState.aim.dx,touchState.aim.dy); if(magnitude>6){ touchState.aimAngle=Math.atan2(touchState.aim.dy,touchState.aim.dx); } state.mouse.x=SW/2+Math.cos(touchState.aimAngle||0)*140; state.mouse.y=SH/2+Math.sin(touchState.aimAngle||0)*140; }
-function clampStickToBase(touch,zoneId){ const center=getZoneCenter(zoneId); const base=zoneId==='aimZone' ? $('aimBase') : $('moveBase'); const radius=Math.max(24, (base?base.getBoundingClientRect().width:108)/2 - 6); const dx=touch.clientX-center.x, dy=touch.clientY-center.y; const d=Math.hypot(dx,dy)||1; const len=Math.min(radius,d); return {dx:dx/d*len, dy:dy/d*len, x:touch.clientX, y:touch.clientY, startX:center.x, startY:center.y}; }
+function updateTouchVisuals(){
+  setStickVisual($('moveBase'),$('moveKnob'),touchState.move.active,touchState.move.startX,touchState.move.startY,touchState.move.dx,touchState.move.dy,54,'moveZone');
+  setStickVisual($('aimBase'),$('aimKnob'),touchState.aim.active,touchState.aim.startX,touchState.aim.startY,touchState.aim.dx,touchState.aim.dy,54,'aimZone');
+  setActionLine(touchState.action);
+}
+function getTouchById(list,id){
+  for(const t of list) if(t.identifier===id) return t;
+  return null;
+}
+function resetMoveStick(){
+  touchState.move.id=null; touchState.move.active=false; touchState.move.dx=0; touchState.move.dy=0;
+  updateTouchVisuals();
+}
+function resetAimStick(){
+  touchState.aim.id=null; touchState.aim.active=false; touchState.aim.dx=0; touchState.aim.dy=0; touchState.shootHeld=false;
+  updateTouchVisuals();
+}
+function clearActionButton(){
+  if(touchState.action.button) touchState.action.button.classList.remove('dragging');
+  touchState.action={id:null,kind:null,startX:0,startY:0,x:0,y:0,dx:0,dy:0,button:null,worldX:0,worldY:0};
+  setActionLine(null);
+}
+function startDashFromVector(dx,dy){
+  const len=Math.hypot(dx,dy);
+  if(player.dashCooldown>0 || len<12) return;
+  const nx=dx/len, ny=dy/len;
+  player.dashCooldown=1.3;
+  player.dashTime=0.18;
+  const dashSpeed=460;
+  player.dashVX=nx*dashSpeed;
+  player.dashVY=ny*dashSpeed;
+  player.dashFacing=Math.atan2(ny,nx);
+  player.dashSpinDir=nx<0?-1:1;
+  if(nx<0) player.faceDir=-1; else if(nx>0) player.faceDir=1;
+  playDash();
+}
+function throwThrowableAt(kind,targetX,targetY){
+  const isMolotov=kind==='molotov';
+  if(isMolotov&&player.molotovs<=0)return;
+  if(!isMolotov&&player.grenades<=0)return;
+  let dx=targetX-player.x,dy=targetY-player.y;
+  const maxDist=isMolotov?420:340;
+  const d=Math.hypot(dx,dy)||1;
+  if(d>maxDist){dx=dx/d*maxDist;dy=dy/d*maxDist;}
+  const finalX=clamp(player.x+dx,10,WORLD.w-10),finalY=clamp(player.y+dy,10,WORLD.h-10);
+  if(isMolotov)player.molotovs--;else player.grenades--;
+  state.grenades.push({type:isMolotov?'molotov':'grenade',x:player.x,y:player.y,startX:player.x,startY:player.y,targetX:finalX,targetY:finalY,progress:0,timer:isMolotov?0.82:0.95,total:isMolotov?0.82:0.95,radius:5,arc:isMolotov?62:54,drawX:player.x,drawY:player.y,height:0});
+}
+function syncAimCursor(){
+  const magnitude=Math.hypot(touchState.aim.dx,touchState.aim.dy);
+  if(touchState.aim.active && magnitude>6){
+    touchState.aimAngle=Math.atan2(touchState.aim.dy,touchState.aim.dx);
+    state.mouse.x=SW/2+Math.cos(touchState.aimAngle)*140;
+    state.mouse.y=SH/2+Math.sin(touchState.aimAngle)*140;
+  } else {
+    state.mouse.x=SW/2+Math.cos(touchState.aimAngle||0)*140;
+    state.mouse.y=SH/2+Math.sin(touchState.aimAngle||0)*140;
+  }
+}
 function bindMobileControls(){
-  const moveZone=$('moveZone'), aimZone=$('aimZone'); if(!moveZone||moveZone.dataset.bound) return; moveZone.dataset.bound='1'; document.body.classList.add('mobile-only');
-  function beginMove(t){ touchState.move={id:t.identifier,active:true,...clampStickToBase(t,'moveZone')}; updateTouchVisuals(); }
-  function beginAim(t){ touchState.aim={id:t.identifier,active:true,...clampStickToBase(t,'aimZone')}; touchState.shootHeld=Math.hypot(touchState.aim.dx,touchState.aim.dy)>10; syncAimCursor(); updateTouchVisuals(); }
-  function updateMove(t){ Object.assign(touchState.move, clampStickToBase(t,'moveZone')); }
-  function updateAim(t){ Object.assign(touchState.aim, clampStickToBase(t,'aimZone')); touchState.shootHeld=Math.hypot(touchState.aim.dx,touchState.aim.dy)>10; syncAimCursor(); }
-  moveZone.addEventListener('touchstart',e=>{ if(touchState.move.active) return; beginMove(e.changedTouches[0]); e.preventDefault(); },{passive:false});
-  aimZone.addEventListener('touchstart',e=>{ if(touchState.aim.active) return; beginAim(e.changedTouches[0]); e.preventDefault(); },{passive:false});
-  function bindDragButton(id,kind){ const btn=$(id); if(!btn) return; btn.addEventListener('touchstart',e=>{ const t=e.changedTouches[0]; touchState.action={id:t.identifier,kind,startX:t.clientX,startY:t.clientY,x:t.clientX,y:t.clientY,dx:0,dy:0,button:btn}; btn.classList.add('dragging'); setActionLine(touchState.action); e.preventDefault(); },{passive:false}); }
-  bindDragButton('dashBtn','dash'); bindDragButton('grenadeBtn','grenade'); bindDragButton('molotovBtn','molotov');
-  function handleMove(e){ let handled=false; const mt=getTouchById(e.touches,touchState.move.id); const at=getTouchById(e.touches,touchState.aim.id); const act=getTouchById(e.touches,touchState.action.id); if(mt&&touchState.move.active){ updateMove(mt); handled=true; } if(at&&touchState.aim.active){ updateAim(at); handled=true; } if(act&&touchState.action.kind){ touchState.action.x=act.clientX; touchState.action.y=act.clientY; touchState.action.dx=act.clientX-touchState.action.startX; touchState.action.dy=act.clientY-touchState.action.startY; setActionLine(touchState.action); handled=true; } if(handled){ updateTouchVisuals(); e.preventDefault(); } }
-  function finishAction(kind){ const dx=touchState.action.dx, dy=touchState.action.dy; if(kind==='dash') startDashFromVector(dx,dy); else if(Math.hypot(dx,dy)>10) throwThrowableAt(kind,player.x+dx*3.0,player.y+dy*3.0); clearActionButton(); }
-  function handleEnd(e){ let handled=false; if(getTouchById(e.changedTouches,touchState.move.id)){ resetMoveStick(); handled=true; } if(getTouchById(e.changedTouches,touchState.aim.id)){ resetAimStick(); syncAimCursor(); handled=true; } if(getTouchById(e.changedTouches,touchState.action.id) && touchState.action.kind){ finishAction(touchState.action.kind); handled=true; } if(handled){ updateTouchVisuals(); e.preventDefault(); } }
-  window.addEventListener('touchmove',handleMove,{passive:false}); window.addEventListener('touchend',handleEnd,{passive:false}); window.addEventListener('touchcancel',handleEnd,{passive:false}); syncAimCursor(); updateTouchVisuals();
+  const moveZone=$('moveZone'), aimZone=$('aimZone');
+  if(!moveZone||moveZone.dataset.bound) return;
+  document.body.classList.add('mobile-only');
+  moveZone.dataset.bound='1';
+  let moveMaxRadius=54;
+  let aimMaxRadius=54;
+
+  function zoneRadius(zoneId){
+    const base=zoneId==='aimZone' ? $('aimBase') : $('moveBase');
+    if(!base) return zoneId==='aimZone' ? aimMaxRadius : moveMaxRadius;
+    return Math.max(24, base.getBoundingClientRect().width*0.5-4);
+  }
+  function updateStick(stick,touch,zoneId){
+    const center=getZoneCenter(zoneId);
+    const dx=touch.clientX-center.x, dy=touch.clientY-center.y;
+    const d=Math.hypot(dx,dy)||1;
+    const maxRadius=zoneRadius(zoneId);
+    const clamped=Math.min(maxRadius,d);
+    stick.dx=dx/d*clamped;
+    stick.dy=dy/d*clamped;
+    stick.x=touch.clientX;
+    stick.y=touch.clientY;
+    stick.startX=center.x;
+    stick.startY=center.y;
+  }
+  function beginMoveTouch(t){
+    const c=getZoneCenter('moveZone');
+    touchState.move={id:t.identifier,active:true,startX:c.x,startY:c.y,x:t.clientX,y:t.clientY,dx:0,dy:0};
+    updateStick(touchState.move,t,'moveZone');
+    updateTouchVisuals();
+  }
+  function beginAimTouch(t){
+    const c=getZoneCenter('aimZone');
+    touchState.aim={id:t.identifier,active:true,startX:c.x,startY:c.y,x:t.clientX,y:t.clientY,dx:0,dy:0};
+    touchState.shootHeld=false;
+    updateStick(touchState.aim,t,'aimZone');
+    syncAimCursor();
+    updateTouchVisuals();
+  }
+
+  moveZone.addEventListener('touchstart',e=>{
+    const t=e.changedTouches[0];
+    beginMoveTouch(t);
+    e.preventDefault();
+  },{passive:false});
+  aimZone.addEventListener('touchstart',e=>{
+    const t=e.changedTouches[0];
+    beginAimTouch(t);
+    e.preventDefault();
+  },{passive:false});
+
+  function handleGlobalMove(e){
+    let handled=false;
+    const moveTouch=getTouchById(e.touches,touchState.move.id) || getTouchById(e.changedTouches||[],touchState.move.id);
+    if(moveTouch && touchState.move.active){
+      updateStick(touchState.move,moveTouch,'moveZone');
+      handled=true;
+    }
+    const aimTouch=getTouchById(e.touches,touchState.aim.id) || getTouchById(e.changedTouches||[],touchState.aim.id);
+    if(aimTouch && touchState.aim.active){
+      updateStick(touchState.aim,aimTouch,'aimZone');
+      const mag=Math.hypot(touchState.aim.dx,touchState.aim.dy);
+      touchState.shootHeld=mag>12;
+      syncAimCursor();
+      handled=true;
+    }
+    const actionTouch=getTouchById(e.touches,touchState.action.id) || getTouchById(e.changedTouches||[],touchState.action.id);
+    if(actionTouch && touchState.action.kind){
+      touchState.action.x=actionTouch.clientX; touchState.action.y=actionTouch.clientY;
+      touchState.action.dx=actionTouch.clientX-touchState.action.startX;
+      touchState.action.dy=actionTouch.clientY-touchState.action.startY;
+      updateActionPreview();
+      setActionLine(touchState.action);
+      handled=true;
+    }
+    if(handled){
+      updateTouchVisuals();
+      e.preventDefault();
+    }
+  }
+
+  function finishAction(kind){
+    const dx=touchState.action.dx, dy=touchState.action.dy;
+    if(kind!=='dash' && Math.hypot(dx,dy)>10) throwThrowableAt(kind,touchState.action.worldX||player.x+dx*3.2,touchState.action.worldY||player.y+dy*3.2);
+    clearActionButton();
+  }
+
+  function handleGlobalEnd(e){
+    let handled=false;
+    if(getTouchById(e.changedTouches||[],touchState.move.id)){
+      resetMoveStick();
+      handled=true;
+    }
+    if(getTouchById(e.changedTouches||[],touchState.aim.id)){
+      resetAimStick();
+      syncAimCursor();
+      handled=true;
+    }
+    if(getTouchById(e.changedTouches||[],touchState.action.id) && touchState.action.kind){
+      finishAction(touchState.action.kind);
+      handled=true;
+    }
+    if(handled) e.preventDefault();
+  }
+
+  function bindDragButton(id,kind){
+    const btn=$(id);
+    if(!btn) return;
+    btn.addEventListener('touchstart',e=>{
+      const t=e.changedTouches[0];
+      touchState.action={id:t.identifier,kind,startX:t.clientX,startY:t.clientY,x:t.clientX,y:t.clientY,dx:0,dy:0,button:btn,worldX:player.x,worldY:player.y};
+      btn.classList.add('dragging');
+      updateActionPreview();
+      setActionLine(touchState.action);
+      e.preventDefault();
+    },{passive:false});
+  }
+  const dashBtn=$('dashBtn');
+  if(dashBtn && !dashBtn.dataset.boundTap){
+    dashBtn.dataset.boundTap='1';
+    dashBtn.addEventListener('touchstart',e=>{ startDashByCurrentDirection(); e.preventDefault(); },{passive:false});
+  }
+  bindDragButton('grenadeBtn','grenade');
+  bindDragButton('molotovBtn','molotov');
+
+  window.addEventListener('touchmove',handleGlobalMove,{passive:false});
+  window.addEventListener('touchend',handleGlobalEnd,{passive:false});
+  window.addEventListener('touchcancel',handleGlobalEnd,{passive:false});
+  syncAimCursor();
+  updateTouchVisuals();
 }
 function updateOrientationNotice(){
   const rotate=$('rotateNotice');
@@ -1076,6 +1224,27 @@ function drawZombies(cam){for(const z of state.zombies){if(!(z.x<cam.x-60||z.y<c
 function drawPellets(cam){ctx.fillStyle='#ffd69c';for(const p of state.pellets){if(p.x<cam.x||p.y<cam.y||p.x>cam.x+SW||p.y>cam.y+SH)continue;const s=worldToScreen(p.x,p.y,cam);ctx.fillRect(px(s.x),px(s.y),2,2);}}
 function drawRockets(cam){for(const r of state.rockets){if(r.x<cam.x-40||r.y<cam.y-40||r.x>cam.x+SW+40||r.y>cam.y+SH+40)continue;const s=worldToScreen(r.x,r.y,cam);const ang=Math.atan2(r.vy,r.vx);ctx.save();ctx.translate(s.x,s.y);ctx.rotate(ang);pxRect(-7,-2,12,4,'#78838d');pxRect(5,-1,4,2,'#ff8c44');pxRect(-9,-3,3,6,'#59626a');ctx.restore();}}
 function drawGrenades(cam){for(const g of state.grenades){if(g.x<cam.x-20||g.y<cam.y-20||g.x>cam.x+SW+20||g.y>cam.y+SH+20)continue;const sh=worldToScreen(g.x,g.y,cam);pxRect(sh.x-4,sh.y-2,8,4,'rgba(0,0,0,0.28)');const s=worldToScreen(g.drawX,g.drawY,cam);if(g.type==='molotov'){pxRect(s.x-2,s.y-6,4,8,'#7b4a22');pxRect(s.x-1,s.y-8,2,3,'#cfd26c');}else{pxRect(s.x-3,s.y-3,6,6,'#556b4d');}}}
+
+function drawThrowablePreview(cam){
+  const a=touchState.action;
+  if(!a || !a.kind || a.kind==='dash') return;
+  const s=worldToScreen(a.worldX,a.worldY,cam);
+  const radius=a.kind==='molotov'?84:128;
+  ctx.save();
+  ctx.globalAlpha=0.9;
+  ctx.strokeStyle=a.kind==='molotov'?'rgba(255,210,90,0.95)':'rgba(255,220,140,0.95)';
+  ctx.lineWidth=2;
+  ctx.setLineDash([8,6]);
+  ctx.beginPath();
+  ctx.arc(s.x,s.y,radius*0.45,0,Math.PI*2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='rgba(255,178,122,0.9)';
+  ctx.beginPath();
+  ctx.arc(s.x,s.y,5,0,Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
 function drawExplosions(cam){for(const e of state.explosions){if(e.x<cam.x-180||e.y<cam.y-180||e.x>cam.x+SW+180||e.y>cam.y+SH+180)continue;const s=worldToScreen(e.x,e.y,cam);ctx.globalAlpha=e.life/e.maxLife;ctx.fillStyle=e.molotov?'rgba(255,190,60,0.26)':e.rocket?'rgba(255,120,60,0.24)':'rgba(255,170,70,0.22)';ctx.beginPath();ctx.arc(s.x,s.y,e.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle=e.molotov?'rgba(255,245,130,0.8)':e.rocket?'rgba(255,230,150,0.72)':'rgba(255,220,120,0.55)';ctx.lineWidth=e.rocket?4:3;ctx.beginPath();ctx.arc(s.x,s.y,e.ring,0,Math.PI*2);ctx.stroke();ctx.fillStyle=e.molotov?'rgba(255,230,100,0.28)':'rgba(255,230,160,0.25)';ctx.beginPath();ctx.arc(s.x,s.y,18+e.radius*0.18,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;}for(const zone of state.fireZones){if(zone.x<cam.x-180||zone.y<cam.y-180||zone.x>cam.x+SW+180||zone.y>cam.y+SH+180)continue;const s=worldToScreen(zone.x,zone.y,cam);const pulse=0.82+Math.sin(state.time*9)*0.18;ctx.globalAlpha=Math.max(0,zone.life/zone.maxLife)*0.65;ctx.fillStyle='rgba(255,120,20,0.22)';ctx.beginPath();ctx.arc(s.x,s.y,zone.radius*pulse,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(255,220,90,0.95)';ctx.lineWidth=4;ctx.beginPath();ctx.arc(s.x,s.y,zone.radius*(0.92+Math.sin(state.time*11)*0.05),0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;}}
 function drawParticles(cam){for(const p of state.particles){if(p.x<cam.x||p.y<cam.y||p.x>cam.x+SW||p.y>cam.y+SH)continue;const s=worldToScreen(p.x,p.y,cam);ctx.fillStyle=p.color;ctx.globalAlpha=p.life/p.maxLife;ctx.fillRect(px(s.x),px(s.y),Math.max(1,px(p.size)),Math.max(1,px(p.size)));ctx.globalAlpha=1;}for(const f of state.flameParticles){if(f.x<cam.x||f.y<cam.y||f.x>cam.x+SW||f.y>cam.y+SH)continue;const s=worldToScreen(f.x,f.y,cam);ctx.fillStyle=f.color;ctx.globalAlpha=f.life/f.maxLife;ctx.fillRect(px(s.x-f.size*0.5),px(s.y-f.size*0.5),Math.max(1,px(f.size)),Math.max(1,px(f.size)));ctx.globalAlpha=1;}for(const t of state.damageTexts){if(t.x<cam.x-20||t.y<cam.y-20||t.x>cam.x+SW+20||t.y>cam.y+SH+20)continue;const s=worldToScreen(t.x,t.y,cam);ctx.globalAlpha=t.life/t.maxLife;ctx.fillStyle='rgba(0,0,0,0.65)';ctx.font='bold 14px Courier New';ctx.textAlign='center';ctx.fillText(String(t.amount),px(s.x)+1,px(s.y)+1);ctx.fillStyle=t.color;ctx.fillText(String(t.amount),px(s.x),px(s.y));ctx.globalAlpha=1;}}
 function drawPickups(cam){for(const item of state.pickups){if(item.x<cam.x-10||item.y<cam.y-10||item.x>cam.x+SW+10||item.y>cam.y+SH+10)continue;const s=worldToScreen(item.x,item.y,cam),x=px(s.x),y=px(s.y);if(item.type==='med'){pxRect(x-5,y-5,10,10,'#d7e3d5');pxRect(x-1,y-4,2,8,'#b03f3f');pxRect(x-4,y-1,8,2,'#b03f3f');}else if(item.type==='molotov'){pxRect(x-3,y-8,6,12,'#7b4a22');pxRect(x-2,y-11,4,4,'#efe56a');pxRect(x-1,y-14,2,3,'#fff2a0');}else if(item.type==='serum'){const bob=Math.sin(state.time*6+(item.phase||0))*2,yy=y+bob;pxRect(x-7,yy-12,14,24,'#b9c8d6');pxRect(x-6,yy-11,12,22,'#748394');pxRect(x-5,yy-10,10,20,'#dfeaf4');pxRect(x-4,yy-9,8,18,'#9fe9ff');pxRect(x-1,yy-7,2,14,'#1e8fff');pxRect(x-3,yy-5,2,2,'#1e8fff');pxRect(x+1,yy-1,2,2,'#1e8fff');pxRect(x-3,yy+3,2,2,'#1e8fff');pxRect(x+1,yy-5,2,2,'#5ad6ff');pxRect(x-3,yy-1,2,2,'#5ad6ff');pxRect(x+1,yy+3,2,2,'#5ad6ff');pxRect(x-4,yy-13,8,2,'#d9e4ed');pxRect(x-4,yy+11,8,2,'#6a7886');}else{pxRect(x-4,y-4,8,8,'#556b4d');pxRect(x-1,y-8,2,4,'#c7c7c7');}}}
@@ -1175,7 +1344,7 @@ function drawVHSOverlay(){
   }
 }
 
-function render(){ctx.clearRect(0,0,SW,SH);const cam=camera();drawGround(cam);drawBuildings(cam);drawPickups(cam);drawAirdrops(cam);drawGrenades(cam);drawPellets(cam);drawRockets(cam);drawZombies(cam);drawPlayer(cam);drawExplosions(cam);drawParticles(cam);drawFog(cam);drawCrosshair();drawReloadBar();drawBossHealthBars(cam);drawAnnouncement();drawMinimap(cam);drawVHSOverlay();if(state.screenFlash>0){ctx.fillStyle=`rgba(255,130,70,${state.screenFlash*0.36})`;ctx.fillRect(0,0,SW,SH);}if(player.hp>0&&state.running){const x=16,y=SH-24,w=220,h=12;pxRect(x,y,w,h,'rgba(255,255,255,0.12)');pxRect(x,y,w*(player.hp/player.maxHp),h,'#cf4444');}if(state.paused){ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fillRect(0,0,SW,SH);ctx.fillStyle='#f0e6d8';ctx.font='bold 34px Courier New';ctx.textAlign='center';ctx.fillText(T[lang].paused,SW/2,SH/2-10);ctx.font='16px Courier New';ctx.fillText(T[lang].pauseHint,SW/2,SH/2+22);}if(state.deathAnim>0){const a=state.deathAnim/1.4;ctx.fillStyle=`rgba(120,0,0,${0.5*(1-a)})`;ctx.fillRect(0,0,SW,SH);}}
+function render(){ctx.clearRect(0,0,SW,SH);const cam=camera();drawGround(cam);drawBuildings(cam);drawPickups(cam);drawAirdrops(cam);drawGrenades(cam);drawPellets(cam);drawRockets(cam);drawZombies(cam);drawPlayer(cam);drawExplosions(cam);drawThrowablePreview(cam);drawParticles(cam);drawFog(cam);drawCrosshair();drawReloadBar();drawBossHealthBars(cam);drawAnnouncement();drawMinimap(cam);drawVHSOverlay();if(state.screenFlash>0){ctx.fillStyle=`rgba(255,130,70,${state.screenFlash*0.36})`;ctx.fillRect(0,0,SW,SH);}if(player.hp>0&&state.running){const x=16,y=SH-24,w=220,h=12;pxRect(x,y,w,h,'rgba(255,255,255,0.12)');pxRect(x,y,w*(player.hp/player.maxHp),h,'#cf4444');}if(state.paused){ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fillRect(0,0,SW,SH);ctx.fillStyle='#f0e6d8';ctx.font='bold 34px Courier New';ctx.textAlign='center';ctx.fillText(T[lang].paused,SW/2,SH/2-10);ctx.font='16px Courier New';ctx.fillText(T[lang].pauseHint,SW/2,SH/2+22);}if(state.deathAnim>0){const a=state.deathAnim/1.4;ctx.fillStyle=`rgba(120,0,0,${0.5*(1-a)})`;ctx.fillRect(0,0,SW,SH);}}
 let last=performance.now();
 function loop(now){
   const dt=Math.min(0.033,(now-last)/1000);last=now;
