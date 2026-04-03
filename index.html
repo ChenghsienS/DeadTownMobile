@@ -63,14 +63,14 @@
     body.mobile-only { touch-action:none; overscroll-behavior:none; }
     .mobileHud { position:fixed; inset:0; z-index:25; pointer-events:none; display:none; }
     .mobileHud.active { display:block; }
-    .joystickZone { position:absolute; bottom:calc(env(safe-area-inset-bottom, 0px) + 12px); width:34vw; max-width:250px; height:46vh; max-height:220px; pointer-events:auto; touch-action:none; }
+    .joystickZone { position:fixed; z-index:24; bottom:calc(env(safe-area-inset-bottom, 0px) + 12px); width:34vw; max-width:250px; height:46vh; max-height:220px; pointer-events:auto; touch-action:none; }
     .joystickCenter { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:1px; height:1px; }
     .joystickZone.left { left:calc(env(safe-area-inset-left, 0px) + 10px); }
     .joystickZone.right { right:calc(env(safe-area-inset-right, 0px) + 116px); }
     .stickBase, .stickKnob { position:absolute; border-radius:50%; transform:translate(-50%,-50%); }
     .stickBase { width:104px; height:104px; background:rgba(255,255,255,0.10); border:2px solid rgba(255,255,255,0.20); box-shadow:0 0 0 2px rgba(0,0,0,0.24) inset; display:block; }
     .stickKnob { width:48px; height:48px; background:rgba(255,178,122,0.34); border:2px solid rgba(255,178,122,0.62); display:block; }
-    .actionCluster { position:absolute; right:calc(env(safe-area-inset-right, 0px) + 72px); bottom:calc(env(safe-area-inset-bottom, 0px) + 8px); width:236px; height:236px; pointer-events:none; }
+    .actionCluster { position:fixed; z-index:25; right:calc(env(safe-area-inset-right, 0px) + 72px); bottom:calc(env(safe-area-inset-bottom, 0px) + 8px); width:236px; height:236px; pointer-events:none; }
     .dragButton { position:absolute; width:64px; height:64px; border-radius:50%; background:rgba(34,27,24,0.88); border:2px solid rgba(255,255,255,0.18); color:#f0e6d8; display:flex; align-items:center; justify-content:center; text-align:center; font-size:11px; line-height:1.05; pointer-events:auto; touch-action:none; box-shadow:0 0 0 2px rgba(0,0,0,0.24) inset; }
     .dragButton small { display:block; opacity:0.72; font-size:9px; margin-top:1px; }
     .dragButton.dragging { border-color:#ffb27a; box-shadow:0 0 0 3px rgba(255,178,122,0.2); }
@@ -240,15 +240,15 @@ function updateResponsiveUI(){
     statsPanel.style.transform='scale('+compactScale.toFixed(3)+')';
     statsPanel.style.transformOrigin='top left';
   }
-  const stickSize=Math.round(clampNumber(shortEdge*0.23,86,112));
+  const stickSize=Math.round(clampNumber(shortEdge*0.24,88,118));
   const knobSize=Math.round(stickSize*0.46);
-  const zoneSize=Math.round(stickSize*1.8);
-  const actionSize=Math.round(clampNumber(shortEdge*0.50,176,242));
+  const zoneSize=Math.round(stickSize*1.55);
+  const actionSize=Math.round(clampNumber(shortEdge*0.46,168,228));
   const btnSize=Math.round(clampNumber(shortEdge*0.14,50,68));
-  const leftInset=Math.round(clampNumber(SW*0.02,8,18));
-  const rightInset=Math.round(clampNumber(SW*0.02,8,18));
-  const bottomInset=Math.round(clampNumber(SH*0.03,8,16));
-  const clusterGap=Math.round(btnSize*0.45);
+  const leftInset=Math.round(clampNumber(SW*0.018,8,18));
+  const rightInset=Math.round(clampNumber(SW*0.018,8,18));
+  const bottomInset=Math.round(clampNumber(SH*0.025,6,14));
+  const clusterGap=Math.round(btnSize*0.18);
   const moveZone=$('moveZone'), aimZone=$('aimZone'), cluster=$('actionCluster');
   if(moveZone){
     moveZone.style.width=zoneSize+'px';
@@ -265,7 +265,7 @@ function updateResponsiveUI(){
   if(aimZone){
     aimZone.style.width=zoneSize+'px';
     aimZone.style.height=zoneSize+'px';
-    aimZone.style.right='calc(env(safe-area-inset-right, 0px) + '+(rightInset + actionSize + clusterGap)+'px)';
+    aimZone.style.right='calc(env(safe-area-inset-right, 0px) + '+(rightInset + actionSize*0.62)+'px)';
     aimZone.style.bottom='calc(env(safe-area-inset-bottom, 0px) + '+bottomInset+'px)';
   }
   document.querySelectorAll('.stickBase').forEach(el=>{el.style.width=stickSize+'px';el.style.height=stickSize+'px';});
@@ -285,7 +285,7 @@ function updateResponsiveUI(){
     fsBtn.style.top='calc(env(safe-area-inset-top, 0px) + '+Math.round(clampNumber(SH*0.018,8,14))+'px)';
   }
 }
-async function enterFullscreen(){
+async async function enterFullscreen(){
   const root=document.documentElement;
   try{
     if(document.fullscreenElement) return true;
@@ -297,7 +297,7 @@ async function enterFullscreen(){
 function updateFullscreenButton(){
   const fsBtn=$('fsBtn');
   if(!fsBtn) return;
-  fsBtn.classList.toggle('hidden', !!document.fullscreenElement);
+  fsBtn.classList.remove('hidden');
 }
 function bindFullscreenButton(){
   const fsBtn=$('fsBtn');
@@ -357,7 +357,7 @@ function bindMenuButtons(){
 }
 function applyLang(){const t=T[lang];
 $('lKills').textContent=t.kills;$('lScore').textContent=t.score;$('lHp').textContent=t.hp;$('lAmmo').textContent=t.ammo;$('lWeapon').textContent=t.weapon;$('lReserve').textContent=t.reserve;$('lGrenades').textContent=t.grenades;$('lTime').textContent=t.time;$('lWave').textContent=t.wave;$('lBest').textContent=t.best;$('desc').textContent=t.desc+' '+t.pauseLabel;$('tip').textContent=t.tip;
-if(!state.running&&!state.gameOver){$('overlayCard').className='card mobileMenuCard';$('overlayCard').innerHTML=`<h2 class="glitchTitle" data-text="${t.title}">${t.title}</h2><div class="creditWrap"><img class="creditAvatar" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAABICAYAAABV7bNHAAAACXBIWXMAAAsSAAALEgHS3X78AAABbElEQVR4nO3YwQnCMBRF0dfQxB10E3YTdBN2E3QTdhN0E3aT3uYfBZH9rqx8uxk4mN+EKk5JkiRJkiRJkqQp4x7vH2s7d9h2v6k9+0r7E0qP4wz1k9k2dW1wqQ6t3H+7iVn2p9dJ2bC7g5G1Q8Y9k1vP4J6sOe5dG9vHhR5s3mRrW2r4kP6dW2b4b0m2bJr+3QWvJwZr1lX3m0UuW0u5tNwq9k7Jgq3k9k6y3U0s9q6dV2rI0j7r8d1x4J7l3m0QfK2uQj0M3m7jQ9w6m2bLJ+Qb7m5k4xL0b2bW1m3mQ0xkq7Yw2q7m8Yx0w7e8t4g6g7f7x3hD3Q7zKQ5Z7m5mR6V4s8gq3l8M2bK1m2m9Q0mT0V3k7n4m1m1m0Tn8g9K4xY2l2Qm9TQH+X5IkSZIkSZIk6QX8A1lZ6rj0H5hSAAAAAElFTkSuQmCC" alt="Cedric avatar"><p style="opacity:0.72;margin:0;">Created by <span class="accent">CEDRRRIIICCC</span></p><p class="compactNote">ChatGPT assisted build · V1.0.4</p></div><p class="menuInfo">${lang==='zh'?'手机横屏版。左摇杆移动，右摇杆瞄准并自动射击。右侧按钮拖拽后松手释放。':'Mobile landscape build. Left stick to move, right stick to aim and auto-fire. Drag the right-side buttons and release to use.'}</p><p class="compactNote">${lang==='zh'?'Safari 里可能不是完全真全屏，但现在可以直接点 Start 测试。':'Safari may still show browser bars, but Start is now always reachable for testing.'}</p><p style="opacity:0.8;margin:4px 0 10px;">Name: <span class="accent">${state.playerName}</span></p><div class="menuActions"><button id="startBtn">${t.startBtn}</button><button id="renameBtn">${lang==='zh'?'修改名字':'Change Name'}</button><button id="fsMenuBtn">${lang==='zh'?'全屏':'Fullscreen'}</button></div>`;$('overlay').classList.remove('hidden');setTimeout(()=>{const renameBtn=$('renameBtn'); if(renameBtn) renameBtn.onclick=()=>promptPlayerName(); const startBtn=$('startBtn'); if(startBtn) startBtn.onclick=()=>resetGame(); const fsMenuBtn=$('fsMenuBtn'); if(fsMenuBtn) fsMenuBtn.onclick=()=>enterFullscreen();},0);}
+if(!state.running&&!state.gameOver){$('overlayCard').className='card mobileMenuCard';$('overlayCard').innerHTML=`<h2 class="glitchTitle" data-text="${t.title}">${t.title}</h2><div class="creditWrap"><img class="creditAvatar" loading="eager" decoding="sync" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAABICAYAAABV7bNHAAAACXBIWXMAAAsSAAALEgHS3X78AAABbElEQVR4nO3YwQnCMBRF0dfQxB10E3YTdBN2E3QTdhN0E3aT3uYfBZH9rqx8uxk4mN+EKk5JkiRJkiRJkqQp4x7vH2s7d9h2v6k9+0r7E0qP4wz1k9k2dW1wqQ6t3H+7iVn2p9dJ2bC7g5G1Q8Y9k1vP4J6sOe5dG9vHhR5s3mRrW2r4kP6dW2b4b0m2bJr+3QWvJwZr1lX3m0UuW0u5tNwq9k7Jgq3k9k6y3U0s9q6dV2rI0j7r8d1x4J7l3m0QfK2uQj0M3m7jQ9w6m2bLJ+Qb7m5k4xL0b2bW1m3mQ0xkq7Yw2q7m8Yx0w7e8t4g6g7f7x3hD3Q7zKQ5Z7m5mR6V4s8gq3l8M2bK1m2m9Q0mT0V3k7n4m1m1m0Tn8g9K4xY2l2Qm9TQH+X5IkSZIkSZIk6QX8A1lZ6rj0H5hSAAAAAElFTkSuQmCC" alt="Cedric avatar"><p style="opacity:0.72;margin:0;">Created by <span class="accent">CEDRRRIIICCC</span></p><p class="compactNote">ChatGPT assisted build · V1.0.4</p></div><p class="menuInfo">${lang==='zh'?'手机横屏版。左摇杆移动，右摇杆瞄准并自动射击。右侧按钮拖拽后松手释放。':'Mobile landscape build. Left stick to move, right stick to aim and auto-fire. Drag the right-side buttons and release to use.'}</p><p class="compactNote">${lang==='zh'?'Safari 里可能不是完全真全屏，但现在可以直接点 Start 测试。':'Safari may still show browser bars, but Start is now always reachable for testing.'}</p><p style="opacity:0.8;margin:4px 0 10px;">Name: <span class="accent">${state.playerName}</span></p><div class="menuActions"><button id="startBtn">${t.startBtn}</button><button id="renameBtn">${lang==='zh'?'修改名字':'Change Name'}</button><button id="fsMenuBtn">${lang==='zh'?'全屏':'Fullscreen'}</button></div>`;$('overlay').classList.remove('hidden');setTimeout(()=>{const renameBtn=$('renameBtn'); if(renameBtn) renameBtn.onclick=()=>promptPlayerName(); const startBtn=$('startBtn'); if(startBtn) startBtn.onclick=()=>resetGame(); const fsMenuBtn=$('fsMenuBtn'); if(fsMenuBtn) fsMenuBtn.onclick=()=>enterFullscreen();},0);}
 else if(state.gameOver){$('overlayCard').className='card';$('overlayCard').innerHTML=`<h2>${t.dead}</h2><p>${t.score}: <span class="accent">${Math.floor(state.score)}</span></p><p>${t.kills}: <span class="accent">${state.kills}</span></p><p>${t.survive}: <span class="accent">${Math.floor(state.surviveTime)} s</span></p><p>${t.best}: <span class="accent">${state.best}</span></p><div class="controls" style="justify-content:center;margin-top:12px;"><button id="restartBtn">${t.restart}</button><button id="menuBtn">${t.mainMenu}</button></div>`;setTimeout(()=>{const btn=$('restartBtn'); if(btn) btn.onclick=()=>resetGame(); const menuBtn=$('menuBtn'); if(menuBtn) menuBtn.onclick=()=>goToMainMenu();},0);}
 const hint=$('mobileHint'); if(hint) hint.textContent=lang==='zh'?'手机横屏操作已启用':'Landscape mobile controls enabled';
 const dashBtn=$('dashBtn'), grenadeBtn=$('grenadeBtn'), molotovBtn=$('molotovBtn'), fsBtn=$('fsBtn');
@@ -703,22 +703,18 @@ function getZoneCenter(zoneId){
 function setStickVisual(baseEl,knobEl,active,startX,startY,dx,dy,maxRadius,zoneId){
   if(!baseEl||!knobEl) return;
   const center=getZoneCenter(zoneId);
+  baseEl.style.display='block';
+  knobEl.style.display='block';
+  baseEl.style.left=center.x+'px';
+  baseEl.style.top=center.y+'px';
   if(!active){
-    baseEl.style.display='block';
-    knobEl.style.display='block';
-    baseEl.style.left=center.x+'px';
-    baseEl.style.top=center.y+'px';
     knobEl.style.left=center.x+'px';
     knobEl.style.top=center.y+'px';
     knobEl.style.opacity='0.85';
     return;
   }
-  baseEl.style.display='block';
-  knobEl.style.display='block';
-  baseEl.style.left=startX+'px';
-  baseEl.style.top=startY+'px';
-  knobEl.style.left=(startX+dx)+'px';
-  knobEl.style.top=(startY+dy)+'px';
+  knobEl.style.left=(center.x+dx)+'px';
+  knobEl.style.top=(center.y+dy)+'px';
   knobEl.style.opacity='1';
 }
 function setActionLine(action){
@@ -803,59 +799,106 @@ function bindMobileControls(){
   if(!moveZone||moveZone.dataset.bound) return;
   document.body.classList.add('mobile-only');
   moveZone.dataset.bound='1';
-  const maxRadius=54;
-  function updateStick(stick,touch){
-    const dx=touch.clientX-stick.startX, dy=touch.clientY-stick.startY;
+  let moveMaxRadius=54;
+  let aimMaxRadius=54;
+
+  function zoneRadius(zoneId){
+    const base=zoneId==='aimZone' ? $('aimBase') : $('moveBase');
+    if(!base) return zoneId==='aimZone' ? aimMaxRadius : moveMaxRadius;
+    return Math.max(24, base.getBoundingClientRect().width*0.5-4);
+  }
+  function updateStick(stick,touch,zoneId){
+    const center=getZoneCenter(zoneId);
+    const dx=touch.clientX-center.x, dy=touch.clientY-center.y;
     const d=Math.hypot(dx,dy)||1;
+    const maxRadius=zoneRadius(zoneId);
     const clamped=Math.min(maxRadius,d);
     stick.dx=dx/d*clamped;
     stick.dy=dy/d*clamped;
     stick.x=touch.clientX;
     stick.y=touch.clientY;
+    stick.startX=center.x;
+    stick.startY=center.y;
   }
-  moveZone.addEventListener('touchstart',e=>{
-    const t=e.changedTouches[0];
-    touchState.move={id:t.identifier,active:true,startX:t.clientX,startY:t.clientY,x:t.clientX,y:t.clientY,dx:0,dy:0};
+  function beginMoveTouch(t){
+    const c=getZoneCenter('moveZone');
+    touchState.move={id:t.identifier,active:true,startX:c.x,startY:c.y,x:t.clientX,y:t.clientY,dx:0,dy:0};
+    updateStick(touchState.move,t,'moveZone');
     updateTouchVisuals();
-    e.preventDefault();
-  },{passive:false});
-  moveZone.addEventListener('touchmove',e=>{
-    const t=getTouchById(e.changedTouches,touchState.move.id);
-    if(!t) return;
-    updateStick(touchState.move,t);
-    updateTouchVisuals();
-    e.preventDefault();
-  },{passive:false});
-  moveZone.addEventListener('touchend',e=>{
-    if(getTouchById(e.changedTouches,touchState.move.id)) { resetMoveStick(); e.preventDefault(); }
-  },{passive:false});
-  moveZone.addEventListener('touchcancel',e=>{
-    if(getTouchById(e.changedTouches,touchState.move.id)) { resetMoveStick(); e.preventDefault(); }
-  },{passive:false});
-
-  aimZone.addEventListener('touchstart',e=>{
-    const t=e.changedTouches[0];
-    touchState.aim={id:t.identifier,active:true,startX:t.clientX,startY:t.clientY,x:t.clientX,y:t.clientY,dx:0,dy:0};
+  }
+  function beginAimTouch(t){
+    const c=getZoneCenter('aimZone');
+    touchState.aim={id:t.identifier,active:true,startX:c.x,startY:c.y,x:t.clientX,y:t.clientY,dx:0,dy:0};
     touchState.shootHeld=false;
-    updateTouchVisuals();
-    e.preventDefault();
-  },{passive:false});
-  aimZone.addEventListener('touchmove',e=>{
-    const t=getTouchById(e.changedTouches,touchState.aim.id);
-    if(!t) return;
-    updateStick(touchState.aim,t);
-    const mag=Math.hypot(touchState.aim.dx,touchState.aim.dy);
-    touchState.shootHeld=mag>12;
+    updateStick(touchState.aim,t,'aimZone');
     syncAimCursor();
     updateTouchVisuals();
+  }
+
+  moveZone.addEventListener('touchstart',e=>{
+    const t=e.changedTouches[0];
+    beginMoveTouch(t);
     e.preventDefault();
   },{passive:false});
-  aimZone.addEventListener('touchend',e=>{
-    if(getTouchById(e.changedTouches,touchState.aim.id)) { resetAimStick(); syncAimCursor(); e.preventDefault(); }
+  aimZone.addEventListener('touchstart',e=>{
+    const t=e.changedTouches[0];
+    beginAimTouch(t);
+    e.preventDefault();
   },{passive:false});
-  aimZone.addEventListener('touchcancel',e=>{
-    if(getTouchById(e.changedTouches,touchState.aim.id)) { resetAimStick(); syncAimCursor(); e.preventDefault(); }
-  },{passive:false});
+
+  function handleGlobalMove(e){
+    let handled=false;
+    const moveTouch=getTouchById(e.touches,touchState.move.id) || getTouchById(e.changedTouches||[],touchState.move.id);
+    if(moveTouch && touchState.move.active){
+      updateStick(touchState.move,moveTouch,'moveZone');
+      handled=true;
+    }
+    const aimTouch=getTouchById(e.touches,touchState.aim.id) || getTouchById(e.changedTouches||[],touchState.aim.id);
+    if(aimTouch && touchState.aim.active){
+      updateStick(touchState.aim,aimTouch,'aimZone');
+      const mag=Math.hypot(touchState.aim.dx,touchState.aim.dy);
+      touchState.shootHeld=mag>12;
+      syncAimCursor();
+      handled=true;
+    }
+    const actionTouch=getTouchById(e.touches,touchState.action.id) || getTouchById(e.changedTouches||[],touchState.action.id);
+    if(actionTouch && touchState.action.kind){
+      touchState.action.x=actionTouch.clientX; touchState.action.y=actionTouch.clientY;
+      touchState.action.dx=actionTouch.clientX-touchState.action.startX;
+      touchState.action.dy=actionTouch.clientY-touchState.action.startY;
+      setActionLine(touchState.action);
+      handled=true;
+    }
+    if(handled){
+      updateTouchVisuals();
+      e.preventDefault();
+    }
+  }
+
+  function finishAction(kind){
+    const dx=touchState.action.dx, dy=touchState.action.dy;
+    if(kind==='dash') startDashFromVector(dx,dy);
+    else if(Math.hypot(dx,dy)>10) throwThrowableAt(kind,player.x+dx*3.2,player.y+dy*3.2);
+    clearActionButton();
+  }
+
+  function handleGlobalEnd(e){
+    let handled=false;
+    if(getTouchById(e.changedTouches||[],touchState.move.id)){
+      resetMoveStick();
+      handled=true;
+    }
+    if(getTouchById(e.changedTouches||[],touchState.aim.id)){
+      resetAimStick();
+      syncAimCursor();
+      handled=true;
+    }
+    if(getTouchById(e.changedTouches||[],touchState.action.id) && touchState.action.kind){
+      finishAction(touchState.action.kind);
+      handled=true;
+    }
+    if(handled) e.preventDefault();
+  }
 
   function bindDragButton(id,kind){
     const btn=$(id);
@@ -867,32 +910,16 @@ function bindMobileControls(){
       setActionLine(touchState.action);
       e.preventDefault();
     },{passive:false});
-    btn.addEventListener('touchmove',e=>{
-      const t=getTouchById(e.changedTouches,touchState.action.id);
-      if(!t || touchState.action.kind!==kind) return;
-      touchState.action.x=t.clientX; touchState.action.y=t.clientY;
-      touchState.action.dx=t.clientX-touchState.action.startX;
-      touchState.action.dy=t.clientY-touchState.action.startY;
-      setActionLine(touchState.action);
-      e.preventDefault();
-    },{passive:false});
-    function finish(e){
-      const t=getTouchById(e.changedTouches,touchState.action.id);
-      if(!t || touchState.action.kind!==kind) return;
-      const dx=touchState.action.dx, dy=touchState.action.dy;
-      if(kind==='dash') startDashFromVector(dx,dy);
-      else if(Math.hypot(dx,dy)>10) throwThrowableAt(kind,player.x+dx*3.2,player.y+dy*3.2);
-      clearActionButton();
-      e.preventDefault();
-    }
-    btn.addEventListener('touchend',finish,{passive:false});
-    btn.addEventListener('touchcancel',e=>{ if(touchState.action.kind===kind) { clearActionButton(); e.preventDefault(); } },{passive:false});
   }
   bindDragButton('dashBtn','dash');
   bindDragButton('grenadeBtn','grenade');
   bindDragButton('molotovBtn','molotov');
-  window.addEventListener('touchmove',e=>{ if(document.body.classList.contains('mobile-only')) e.preventDefault(); },{passive:false});
+
+  window.addEventListener('touchmove',handleGlobalMove,{passive:false});
+  window.addEventListener('touchend',handleGlobalEnd,{passive:false});
+  window.addEventListener('touchcancel',handleGlobalEnd,{passive:false});
   syncAimCursor();
+  updateTouchVisuals();
 }
 function updateOrientationNotice(){
   const rotate=$('rotateNotice');
