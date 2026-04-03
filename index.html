@@ -197,7 +197,7 @@
         <line id="dragLinePath" x1="0" y1="0" x2="0" y2="0" stroke="rgba(255,178,122,0.9)" stroke-width="1.5" stroke-linecap="round" visibility="hidden"></line>
       </svg>
     </div>
-    <div class="dragButton" id="dashBtn" style="left:6px; top:104px;">ROLL<small>drag</small></div>
+    <div class="dragButton" id="dashBtn" style="left:6px; top:104px;">ROLL<small>tap</small></div>
     <div class="dragButton" id="grenadeBtn" style="left:68px; top:26px;">GRENADE<small>drag</small></div>
     <div class="dragButton" id="molotovBtn" style="left:146px; top:86px;">FIRE<small>drag</small></div>
   </div>
@@ -256,23 +256,24 @@ function updateResponsiveUI(){
     moveZone.style.left='calc(env(safe-area-inset-left, 0px) + '+leftInset+'px)';
     moveZone.style.bottom='calc(env(safe-area-inset-bottom, 0px) + '+bottomInset+'px)';
   }
-  if(cluster){
-    cluster.style.width=actionSize+'px';
-    cluster.style.height=actionSize+'px';
-    cluster.style.right='calc(env(safe-area-inset-right, 0px) + '+rightInset+'px)';
-    cluster.style.bottom='calc(env(safe-area-inset-bottom, 0px) + '+bottomInset+'px)';
-  }
+  const centerOffset=Math.max(0, Math.round((actionSize-zoneSize)*0.5));
   if(aimZone){
     aimZone.style.width=zoneSize+'px';
     aimZone.style.height=zoneSize+'px';
-    aimZone.style.right='calc(env(safe-area-inset-right, 0px) + '+(rightInset + actionSize*0.62)+'px)';
+    aimZone.style.right='calc(env(safe-area-inset-right, 0px) + '+rightInset+'px)';
     aimZone.style.bottom='calc(env(safe-area-inset-bottom, 0px) + '+bottomInset+'px)';
+  }
+  if(cluster){
+    cluster.style.width=actionSize+'px';
+    cluster.style.height=actionSize+'px';
+    cluster.style.right='calc(env(safe-area-inset-right, 0px) + '+Math.max(0,rightInset-centerOffset)+'px)';
+    cluster.style.bottom='calc(env(safe-area-inset-bottom, 0px) + '+Math.max(0,bottomInset-centerOffset)+'px)';
   }
   document.querySelectorAll('.stickBase').forEach(el=>{el.style.width=stickSize+'px';el.style.height=stickSize+'px';});
   document.querySelectorAll('.stickKnob').forEach(el=>{el.style.width=knobSize+'px';el.style.height=knobSize+'px';});
-  const cx=actionSize*0.48, cy=actionSize*0.56, radius=actionSize*0.33;
+  const cx=actionSize*0.5, cy=actionSize*0.5, radius=actionSize*0.37;
   const dashBtn=$('dashBtn'), grenadeBtn=$('grenadeBtn'), molotovBtn=$('molotovBtn');
-  [[dashBtn,Math.PI*1.15],[grenadeBtn,Math.PI*1.48],[molotovBtn,Math.PI*0.78]].forEach(([btn,ang])=>{
+  [[dashBtn,Math.PI*1.22],[grenadeBtn,Math.PI*0.86],[molotovBtn,Math.PI*0.50]].forEach(([btn,ang])=>{
     if(!btn) return;
     btn.style.width=btnSize+'px'; btn.style.height=btnSize+'px';
     btn.style.fontSize=Math.max(8,Math.round(btnSize*0.18))+'px';
@@ -339,8 +340,8 @@ else if(state.gameOver){$('overlayCard').className='card';$('overlayCard').inner
 const hint=$('mobileHint'); if(hint) hint.textContent=lang==='zh'?'手机横屏操作已启用':'Landscape mobile controls enabled';
 const dashBtn=$('dashBtn'), grenadeBtn=$('grenadeBtn'), molotovBtn=$('molotovBtn');
 if(dashBtn) dashBtn.innerHTML=lang==='zh'?'翻滚<small>点击</small>':'ROLL<small>tap</small>';
-if(grenadeBtn) grenadeBtn.innerHTML=lang==='zh'?'手雷<small>拖拽瞄准</small>':'GRENADE<small>drag aim</small>';
-if(molotovBtn) molotovBtn.innerHTML=lang==='zh'?'燃烧弹<small>拖拽瞄准</small>':'FIRE<small>drag aim</small>';
+if(grenadeBtn) grenadeBtn.innerHTML=lang==='zh'?'手雷<small>拖拽瞄准</small>':'GRENADE<small>drag</small>';
+if(molotovBtn) molotovBtn.innerHTML=lang==='zh'?'燃烧弹<small>拖拽瞄准</small>':'FIRE<small>drag</small>';
 updateHUD();updateLoadingUI();updateResponsiveUI();updateFullscreenButton();}
 $('langBtn').onclick=()=>{lang=lang==='en'?'zh':'en';applyLang();updateCursorVisibility();};
 function promptPlayerName(){
@@ -780,14 +781,19 @@ function throwThrowableAt(kind,targetX,targetY){
 }
 function syncAimCursor(){
   const magnitude=Math.hypot(touchState.aim.dx,touchState.aim.dy);
-  if(touchState.aim.active && magnitude>6){
+  const aimBase=$('aimBase');
+  const aimRadius=Math.max(28, (aimBase?.getBoundingClientRect().width||108)*0.5-4);
+  const camNow=camera();
+  let ratio=0;
+  if(touchState.aim.active && magnitude>4){
     touchState.aimAngle=Math.atan2(touchState.aim.dy,touchState.aim.dx);
-    state.mouse.x=SW/2+Math.cos(touchState.aimAngle)*140;
-    state.mouse.y=SH/2+Math.sin(touchState.aimAngle)*140;
-  } else {
-    state.mouse.x=SW/2+Math.cos(touchState.aimAngle||0)*140;
-    state.mouse.y=SH/2+Math.sin(touchState.aimAngle||0)*140;
+    ratio=clamp(magnitude/aimRadius,0,1);
   }
+  const aimDistance=28 + Math.pow(ratio,1.18)*420;
+  const pxScreen=player.x-camNow.x;
+  const pyScreen=player.y-camNow.y;
+  state.mouse.x=pxScreen+Math.cos(touchState.aimAngle||0)*aimDistance;
+  state.mouse.y=pyScreen+Math.sin(touchState.aimAngle||0)*aimDistance;
 }
 function bindMobileControls(){
   const moveZone=$('moveZone'), aimZone=$('aimZone');
@@ -1270,6 +1276,26 @@ function drawAirdrops(cam){
     }
   }
 }
+function drawAimLaser(cam){
+  if(!state.running) return;
+  const from=worldToScreen(player.x,player.y,cam);
+  const toX=state.mouse.x, toY=state.mouse.y;
+  ctx.save();
+  ctx.strokeStyle='rgba(255,50,50,0.38)';
+  ctx.lineWidth=4;
+  ctx.beginPath();
+  ctx.moveTo(px(from.x), px(from.y));
+  ctx.lineTo(px(toX), px(toY));
+  ctx.stroke();
+  ctx.strokeStyle='rgba(255,110,110,0.9)';
+  ctx.lineWidth=1.4;
+  ctx.beginPath();
+  ctx.moveTo(px(from.x), px(from.y));
+  ctx.lineTo(px(toX), px(toY));
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawCrosshair(){
   if(MOBILE_ONLY && !touchState.aim.active && !state.running) return;
   const x=px(state.mouse.x),y=px(state.mouse.y);
@@ -1344,7 +1370,7 @@ function drawVHSOverlay(){
   }
 }
 
-function render(){ctx.clearRect(0,0,SW,SH);const cam=camera();drawGround(cam);drawBuildings(cam);drawPickups(cam);drawAirdrops(cam);drawGrenades(cam);drawPellets(cam);drawRockets(cam);drawZombies(cam);drawPlayer(cam);drawExplosions(cam);drawThrowablePreview(cam);drawParticles(cam);drawFog(cam);drawCrosshair();drawReloadBar();drawBossHealthBars(cam);drawAnnouncement();drawMinimap(cam);drawVHSOverlay();if(state.screenFlash>0){ctx.fillStyle=`rgba(255,130,70,${state.screenFlash*0.36})`;ctx.fillRect(0,0,SW,SH);}if(player.hp>0&&state.running){const x=16,y=SH-24,w=220,h=12;pxRect(x,y,w,h,'rgba(255,255,255,0.12)');pxRect(x,y,w*(player.hp/player.maxHp),h,'#cf4444');}if(state.paused){ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fillRect(0,0,SW,SH);ctx.fillStyle='#f0e6d8';ctx.font='bold 34px Courier New';ctx.textAlign='center';ctx.fillText(T[lang].paused,SW/2,SH/2-10);ctx.font='16px Courier New';ctx.fillText(T[lang].pauseHint,SW/2,SH/2+22);}if(state.deathAnim>0){const a=state.deathAnim/1.4;ctx.fillStyle=`rgba(120,0,0,${0.5*(1-a)})`;ctx.fillRect(0,0,SW,SH);}}
+function render(){ctx.clearRect(0,0,SW,SH);const cam=camera();drawGround(cam);drawBuildings(cam);drawPickups(cam);drawAirdrops(cam);drawGrenades(cam);drawPellets(cam);drawRockets(cam);drawZombies(cam);drawPlayer(cam);drawExplosions(cam);drawThrowablePreview(cam);drawParticles(cam);drawFog(cam);drawAimLaser(cam);drawCrosshair();drawReloadBar();drawBossHealthBars(cam);drawAnnouncement();drawMinimap(cam);drawVHSOverlay();if(state.screenFlash>0){ctx.fillStyle=`rgba(255,130,70,${state.screenFlash*0.36})`;ctx.fillRect(0,0,SW,SH);}if(player.hp>0&&state.running){const x=16,y=SH-24,w=220,h=12;pxRect(x,y,w,h,'rgba(255,255,255,0.12)');pxRect(x,y,w*(player.hp/player.maxHp),h,'#cf4444');}if(state.paused){ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fillRect(0,0,SW,SH);ctx.fillStyle='#f0e6d8';ctx.font='bold 34px Courier New';ctx.textAlign='center';ctx.fillText(T[lang].paused,SW/2,SH/2-10);ctx.font='16px Courier New';ctx.fillText(T[lang].pauseHint,SW/2,SH/2+22);}if(state.deathAnim>0){const a=state.deathAnim/1.4;ctx.fillStyle=`rgba(120,0,0,${0.5*(1-a)})`;ctx.fillRect(0,0,SW,SH);}}
 let last=performance.now();
 function loop(now){
   const dt=Math.min(0.033,(now-last)/1000);last=now;
