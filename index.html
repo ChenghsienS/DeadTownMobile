@@ -7,7 +7,8 @@
   <style>
     * { box-sizing: border-box; image-rendering: pixelated; }
     html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#0a0a0a; font-family:"Courier New",monospace; color:#f0e6d8; }
-    canvas { display:block; width:100vw; height:100vh; background:#0a0a0a; cursor:default; }
+    body { position:fixed; inset:0; min-height:100dvh; min-height:100svh; -webkit-text-size-adjust:100%; overscroll-behavior:none; }
+    canvas { display:block; width:100vw; height:100dvh; height:100svh; background:#0a0a0a; cursor:default; }
     .hud { position:fixed; top:calc(env(safe-area-inset-top, 0px) + 8px); left:calc(env(safe-area-inset-left, 0px) + 8px); right:auto; bottom:auto; display:flex !important; gap:0; z-index:24; pointer-events:none; }
     .panel { background:rgba(12,10,10,0.88); border:2px solid rgba(255,255,255,0.12); padding:10px 12px; box-shadow:0 0 0 2px rgba(0,0,0,0.35) inset; pointer-events:auto; }
     .stats { display:grid; grid-template-columns:repeat(5,minmax(78px,auto)); gap:8px 14px; min-width:580px; }
@@ -17,10 +18,10 @@
     .titleBox h1 { margin:0 0 6px; font-size:24px; }
     .titleBox p { margin:0; font-size:12px; line-height:1.5; opacity:0.86; }
     .accent { color:#ffb27a; }
-    .overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.45); z-index:30; }
-    .card { width:min(92vw,760px); background:rgba(14,10,10,0.94); border:2px solid rgba(255,255,255,0.12); padding:24px; text-align:center; box-shadow:0 0 0 3px rgba(0,0,0,0.42) inset; }
-    .card h2 { margin:0 0 10px; font-size:32px; }
-    .card p { margin:8px 0; line-height:1.7; }
+    .overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:calc(env(safe-area-inset-top, 0px) + 8px) calc(env(safe-area-inset-right, 0px) + 10px) calc(env(safe-area-inset-bottom, 0px) + 8px) calc(env(safe-area-inset-left, 0px) + 10px); background:rgba(0,0,0,0.45); z-index:30; }
+    .card { width:min(92vw,760px); max-width:min(92vw,760px); max-height:min(80dvh,80svh); overflow:auto; -webkit-overflow-scrolling:touch; background:rgba(14,10,10,0.94); border:2px solid rgba(255,255,255,0.12); padding:clamp(12px,2.4vw,24px); text-align:center; box-shadow:0 0 0 3px rgba(0,0,0,0.42) inset; }
+    .card h2 { margin:0 0 10px; font-size:clamp(22px,3.2vw,32px); }
+    .card p { margin:6px 0; line-height:1.5; font-size:clamp(12px,1.8vw,18px); }
     .hidden { display:none; }
     .tip { display:none !important; }
     .controls { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:8px; }
