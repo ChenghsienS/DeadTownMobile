@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -579,7 +578,6 @@ async function supabaseRequest(path, options={}){
     method: options.method||'GET',
     headers: {
       'apikey': SUPABASE_PUBLISHABLE_KEY,
-      'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
       'Content-Type': 'application/json',
       ...(options.headers||{})
     },
