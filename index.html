@@ -265,6 +265,83 @@ function updateResponsiveUI(){
   applyDevTargetClasses();
   updateTouchVisuals();
 }
+
+function loadMobileUILayout(){
+  try{
+    const raw=localStorage.getItem(UI_LAYOUT_KEY);
+    if(raw){
+      const parsed=JSON.parse(raw);
+      ['moveZone','aimZone','dashBtn','grenadeBtn','molotovBtn'].forEach(key=>{
+        if(parsed[key] && typeof parsed[key].x==='number' && typeof parsed[key].y==='number') uiLayout[key]={x:parsed[key].x,y:parsed[key].y};
+      });
+    }
+  }catch(err){}
+}
+function saveMobileUILayout(){
+  try{ localStorage.setItem(UI_LAYOUT_KEY, JSON.stringify(uiLayout)); }catch(err){}
+}
+function applyDevTargetClasses(){
+  ['moveZone','aimZone','dashBtn','grenadeBtn','molotovBtn'].forEach(id=>{
+    const el=$(id); if(!el) return;
+    el.classList.toggle('uiTarget', !!uiSetupMode);
+    el.classList.toggle('dragging', uiEditTarget===id);
+  });
+}
+function clampUILayoutPoint(nx,ny,sizePx){
+  const halfW=sizePx/(2*Math.max(1,SW));
+  const halfH=sizePx/(2*Math.max(1,SH));
+  return {x:clampNumber(nx,halfW,1-halfW), y:clampNumber(ny,halfH,1-halfH)};
+}
+function beginUIEdit(id,clientX,clientY,touchId){
+  uiEditTarget=id;
+  uiEditTouchId=touchId;
+  const el=$(id);
+  if(el) el.classList.add('dragging');
+  updateUIEditPosition(clientX,clientY);
+}
+function updateUIEditPosition(clientX,clientY){
+  if(!uiEditTarget) return;
+  const size=(uiEditTarget==='moveZone'||uiEditTarget==='aimZone')?uiMetrics.zoneSize:uiMetrics.buttonSize;
+  const p=clampUILayoutPoint(clientX/Math.max(1,SW), clientY/Math.max(1,SH), size);
+  uiLayout[uiEditTarget]={x:p.x,y:p.y};
+  updateResponsiveUI();
+}
+function endUIEdit(){
+  const el=uiEditTarget?$(uiEditTarget):null;
+  if(el) el.classList.remove('dragging');
+  uiEditTarget=null;
+  uiEditTouchId=null;
+  saveMobileUILayout();
+  applyDevTargetClasses();
+}
+function openMobileUISetup(forceStart){
+  if(!MOBILE_MODE){ setDeviceMode('mobile'); }
+  uiSetupMode=true;
+  $('overlay').classList.add('uiSetupMode');
+  applyDevTargetClasses();
+  const title=lang==='zh'?'调整UI布局':'Adjust UI Layout';
+  const info=lang==='zh'?'直接拖动左摇杆、右摇杆和三个按钮到你想要的位置。':'Drag the left stick, right stick, and three action buttons to the positions you want.';
+  const note=lang==='zh'?'保存后再开始游戏。':'Save first, then start the game.';
+  $('overlayCard').className='card mobileMenuCard';
+  $('overlayCard').innerHTML=`<h2>${title}</h2><p class="menuInfo">${info}</p><p class="compactNote">${note}</p><div class="menuActions"><button id="uiReadyBtn">${forceStart?(lang==='zh'?'保存并开始':'Save & Start'):(lang==='zh'?'保存并返回':'Save & Back')}</button><button id="uiResetBtn">${lang==='zh'?'重置':'Reset'}</button></div>`;
+  $('overlay').classList.remove('hidden');
+  setTimeout(()=>{
+    const ready=$('uiReadyBtn'); if(ready) ready.onclick=()=>finishMobileUISetup(forceStart);
+    const reset=$('uiResetBtn'); if(reset) reset.onclick=()=>{ uiLayout=JSON.parse(JSON.stringify(uiLayoutDefaults)); saveMobileUILayout(); updateResponsiveUI(); };
+  },0);
+}
+function finishMobileUISetup(forceStart){
+  saveMobileUILayout();
+  uiSetupMode=false;
+  uiSetupRequiredMobile=false;
+  sessionStorage.setItem(MOBILE_UI_SETUP_SESSION_KEY,'1');
+  $('overlay').classList.remove('uiSetupMode');
+  applyDevTargetClasses();
+  endUIEdit();
+  if(forceStart) resetGame(); else applyLang();
+}
+loadMobileUILayout();
+
 function setStickVisual(baseEl,knobEl,active,dx,dy,zoneId){
   if(!baseEl||!knobEl) return;
   const center=getZoneLocalCenter(zoneId);
