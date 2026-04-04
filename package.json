@@ -1,0 +1,12 @@
+{
+  "name": "deadtown-online-coop-server",
+  "version": "0.1.0",
+  "private": true,
+  "main": "deadtown_online_server.js",
+  "scripts": {
+    "start": "node deadtown_online_server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
