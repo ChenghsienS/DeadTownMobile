@@ -40,6 +40,12 @@
     .eventToast.error { border-color:rgba(235,110,110,0.42); }
     body.mobile-mode .eventFeed { left:8px; top:50%; transform:translateY(-50%); width:min(72vw,320px); }
     body.mobile-mode .eventToast { font-size:12px; padding:9px 10px; }
+    .spectateBar { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); display:none; align-items:center; gap:10px; z-index:42; background:rgba(12,10,10,0.92); border:2px solid rgba(255,255,255,0.12); box-shadow:0 0 0 2px rgba(0,0,0,0.28) inset; padding:10px 12px; }
+    .spectateBar.show { display:flex; }
+    .spectateBar button { min-width:44px; padding:6px 10px; }
+    .spectateBarLabel { min-width:180px; text-align:center; font-size:13px; line-height:1.35; }
+    body.mobile-mode .spectateBar { bottom:calc(env(safe-area-inset-bottom, 0px) + 12px); width:min(92vw,420px); gap:8px; padding:8px 10px; }
+    body.mobile-mode .spectateBarLabel { min-width:0; flex:1; font-size:12px; }
     .controls { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:8px; }
     button { background:#221b18; color:#f0e6d8; border:2px solid rgba(255,255,255,0.15); padding:8px 12px; font:inherit; cursor:pointer; }
     button:hover { background:#30231d; }
@@ -240,6 +246,7 @@
 
 <div class="tip hidden" id="tip"></div>
 <div class="eventFeed" id="eventFeed"></div>
+<div class="spectateBar" id="spectateBar"><button id="spectatePrevBtn">◀</button><div class="spectateBarLabel" id="spectateLabel">Spectating</div><button id="spectateNextBtn">▶</button></div>
 <div id="devPanel" class="panel hidden" style="position:fixed;right:14px;top:86px;z-index:25;pointer-events:auto;min-width:180px;">
   <div style="font-size:12px;opacity:0.72;margin-bottom:8px;">DEV PANEL</div>
   <div class="controls" style="justify-content:flex-start;flex-wrap:wrap;">
@@ -578,8 +585,8 @@ function updateOrientationNotice(){ $('rotateNotice')?.classList.toggle('active'
 function updatePauseButton(){ const btn=$('pauseTopBtn'); document.body.classList.toggle('ingame', !!state.running && !state.gameOver); if(!btn) return; const shouldShow=MOBILE_MODE && !state.loading && state.running && !state.gameOver; btn.classList.toggle('hidden', !shouldShow); btn.textContent=lang==='zh' ? (state.paused ? '继续' : '暂停') : (state.paused ? 'RESUME' : 'PAUSE'); }
 
 const T={
-  en:{kills:'Kills',score:'Score',hp:'HP',ammo:'Ammo',weapon:'Weapon',reserve:'Reserve',grenades:'Throwables',time:'Time',wave:'Wave',best:'Best',shotgun:'Shotgun',gatling:'Gatling',rocket:'Rocket Launcher',flamethrower:'Flamethrower',reload:'Reloading',title:'DEAD TOWN',desc:'',tip:'',start1:'A dead town has been overrun by endless infected. You are one of the last survivors still fighting.',start2:'This is a zombie horde PvE survival game focused on fast combat, crowd clearing, and weapon drops. Co-op may come in a future version.',start3:'Click Start to begin',startBtn:'Start',returnMenu:'Return to main menu',dead:'YOU DIED',survive:'Survived',restart:'Restart',mainMenu:'Main Menu',boss:'Boss has spawned!',airdrop:'Airdrop incoming!',bossHp:'Boss HP',paused:'PAUSED',pauseHint:'Press P or Esc to resume',pauseLabel:'P / Esc Pause',loading:'Initializing signal...',loadingReady:'Signal locked. Opening menu...',serumDamage:'Serum acquired: +10% Damage',serumSpeed:'Serum acquired: +5% Speed',serumHealth:'Serum acquired: +15 Max HP',changeGrenadeKey:'Grenade Key',changeMolotovKey:'Molotov Key',openKeybindMenu:'Control',backBtn:'Back',keybindTitle:'Keybinds',keybindHint:'Only A-Z and 0-9 are allowed. Current: Grenade {grenade} · Molotov {molotov}',keyPromptGrenade:'Set grenade key (A-Z or 0-9):',keyPromptMolotov:'Set molotov key (A-Z or 0-9):',keyInvalid:'Only a single A-Z or 0-9 key is allowed.',keyConflict:'That key is already used by the other throwable. Choose a different key.',openKeybindMenu:'Key Settings',backBtn:'Back',devUnlock:'Developer',devUnlockPrompt:'Enter developer password:',devUnlockFail:'Wrong password.',devUnlocked:'Developer mode enabled.',devPanel:'DEV PANEL',devShotgun:'Shotgun',devGatling:'Gatling',devRocket:'Rocket',devFlame:'Flamethrower',devHeal:'Heal',devThrowables:'Throwables',devCharger:'Charger',devBoss:'Boss',devBloater:'Bloater',mobileFullscreenTip:'For a fullscreen-like mobile view, add this webpage to your phone Home Screen first.',mobileRoll:'ROLL',mobileGrenade:'GRENADE',mobileFire:'FIRE',createdBy:'Created by',assistedBy:'This game was created with the assistance of',nameLabel:'Name',leaderboardTitle:'Global Top 10',leaderboardLoading:'Loading leaderboard...',leaderboardEmpty:'No scores yet.',leaderboardError:'Leaderboard unavailable right now.',leaderboardRefresh:'Refresh',leaderboardSyncing:'Syncing score...',youTag:'YOU',chooseDevice:'Choose your device before starting.',devicePc:'PC',deviceMobile:'Mobile',rotateTitle:'Rotate Device',rotateDesc:'This mobile mode is designed for landscape play. Rotate your phone horizontally to continue.',devBoss:'Boss',defaultNameTitle:'Name Required for Leaderboard',defaultNameNotice:'You are still using the default name Player. Scores from this session will not be recorded to the online leaderboard.',defaultNameContinue:'Continue Without Ranking',defaultNameBack:'Back to Main Menu',defaultNameRename:'Change Name'},
-  zh:{kills:'击杀',score:'分数',hp:'生命',ammo:'子弹',weapon:'武器',reserve:'备弹',grenades:'投掷物',time:'时间',wave:'波次',best:'最高分',shotgun:'霰弹枪',gatling:'加特林',rocket:'火箭发射器',flamethrower:'喷火器',reload:'换弹中',title:'DEAD TOWN',desc:'',tip:'',start1:'一座死城已被无尽感染者吞没，而你是仍在战斗的幸存者之一。',start2:'这是一款以高速战斗、割草清怪和武器空投为核心的丧尸题材 PVE 生存游戏，未来也许会加入多人合作模式。',start3:'点击开始按钮进入游戏',startBtn:'开始游戏',returnMenu:'返回主菜单',dead:'你死了',survive:'存活',restart:'重新开始',mainMenu:'主菜单',boss:'Boss 已出现！',airdrop:'空投已抵达！',bossHp:'Boss生命',paused:'已暂停',pauseHint:'按 P 或 Esc 继续',pauseLabel:'P / Esc 暂停',loading:'正在初始化信号...',loadingReady:'信号稳定，正在打开菜单...',serumDamage:'已获得血清：伤害 +10%',serumSpeed:'已获得血清：移速 +5%',serumHealth:'已获得血清：生命上限 +15',changeGrenadeKey:'手榴弹键位',changeMolotovKey:'燃烧瓶键位',openKeybindMenu:'Control',backBtn:'返回',keybindTitle:'键位设置',keybindHint:'只能使用 A-Z 和 0-9。当前：手榴弹 {grenade} · 燃烧瓶 {molotov}',keyPromptGrenade:'设置手榴弹键位（A-Z 或 0-9）：',keyPromptMolotov:'设置燃烧瓶键位（A-Z 或 0-9）：',keyInvalid:'只能输入单个 A-Z 或 0-9 键位。',keyConflict:'这个键位已经被另一个投掷物占用了，请换一个。',openKeybindMenu:'键位设置',backBtn:'返回',devUnlock:'开发者',devUnlockPrompt:'输入开发者密码：',devUnlockFail:'密码错误。',devUnlocked:'开发者模式已开启。',devPanel:'开发者面板',devShotgun:'霰弹枪',devGatling:'加特林',devRocket:'火箭筒',devFlame:'喷火器',devHeal:'回血',devThrowables:'投掷物',devCharger:'冲锋怪',devBoss:'Boss',mobileFullscreenTip:'如果想获得接近全屏的手机显示效果，请先将这个网页添加到手机主屏幕，然后再从主屏幕启动游戏。',mobileRoll:'翻滚',mobileGrenade:'手雷',mobileFire:'燃烧瓶',createdBy:'作者',assistedBy:'本游戏在 ChatGPT 的协助下完成',nameLabel:'名字',leaderboardTitle:'全球前十排行榜',leaderboardLoading:'排行榜加载中...',leaderboardEmpty:'暂时还没有成绩。',leaderboardError:'排行榜暂时不可用。',leaderboardRefresh:'刷新',leaderboardSyncing:'正在同步成绩...',youTag:'当前',chooseDevice:'请选择你的设备后再开始。',devicePc:'电脑',deviceMobile:'手机',rotateTitle:'旋转设备',rotateDesc:'手机模式建议横屏游玩。请将手机横过来继续。',devBoss:'首领',defaultNameTitle:'需要先修改名字',defaultNameNotice:'你当前仍在使用默认名字 Player。本局成绩不会记录到后端排行榜。',defaultNameContinue:'继续游玩但不计排行',defaultNameBack:'返回主页面',defaultNameRename:'修改名字'}
+  en:{kills:'Kills',score:'Score',hp:'HP',ammo:'Ammo',weapon:'Weapon',reserve:'Reserve',grenades:'Throwables',time:'Time',wave:'Wave',best:'Best',shotgun:'Shotgun',gatling:'Gatling',rocket:'Rocket Launcher',flamethrower:'Flamethrower',reload:'Reloading',title:'DEAD TOWN',desc:'',tip:'',start1:'A dead town has been overrun by endless infected. You are one of the last survivors still fighting.',start2:'This is a zombie horde PvE survival game focused on fast combat, crowd clearing, and weapon drops. Co-op may come in a future version.',start3:'Click Start to begin',startBtn:'Start',returnMenu:'Return to main menu',dead:'YOU DIED',survive:'Survived',restart:'Restart',mainMenu:'Main Menu',boss:'Boss has spawned!',airdrop:'Airdrop incoming!',bossHp:'Boss HP',paused:'PAUSED',pauseHint:'Press P or Esc to resume',pauseLabel:'P / Esc Pause',loading:'Initializing signal...',loadingReady:'Signal locked. Opening menu...',serumDamage:'Serum acquired: +10% Damage',serumSpeed:'Serum acquired: +5% Speed',serumHealth:'Serum acquired: +15 Max HP',changeGrenadeKey:'Grenade Key',changeMolotovKey:'Molotov Key',openKeybindMenu:'Control',backBtn:'Back',keybindTitle:'Keybinds',keybindHint:'Only A-Z and 0-9 are allowed. Current: Grenade {grenade} · Molotov {molotov}',keyPromptGrenade:'Set grenade key (A-Z or 0-9):',keyPromptMolotov:'Set molotov key (A-Z or 0-9):',keyInvalid:'Only a single A-Z or 0-9 key is allowed.',keyConflict:'That key is already used by the other throwable. Choose a different key.',openKeybindMenu:'Key Settings',backBtn:'Back',devUnlock:'Developer',devUnlockPrompt:'Enter developer password:',devUnlockFail:'Wrong password.',devUnlocked:'Developer mode enabled.',devPanel:'DEV PANEL',devShotgun:'Shotgun',devGatling:'Gatling',devRocket:'Rocket',devFlame:'Flamethrower',devHeal:'Heal',devThrowables:'Throwables',devCharger:'Charger',devBoss:'Boss',devBloater:'Bloater',mobileFullscreenTip:'For a fullscreen-like mobile view, add this webpage to your phone Home Screen first.',mobileRoll:'ROLL',mobileGrenade:'GRENADE',mobileFire:'FIRE',createdBy:'Created by',assistedBy:'This game was created with the assistance of',nameLabel:'Name',leaderboardTitle:'Global Top 10',leaderboardLoading:'Loading leaderboard...',leaderboardEmpty:'No scores yet.',leaderboardError:'Leaderboard unavailable right now.',leaderboardRefresh:'Refresh',leaderboardSyncing:'Syncing score...',youTag:'YOU',chooseDevice:'Choose your device before starting.',devicePc:'PC',deviceMobile:'Mobile',rotateTitle:'Rotate Device',rotateDesc:'This mobile mode is designed for landscape play. Rotate your phone horizontally to continue.',devBoss:'Boss',defaultNameTitle:'Name Required for Leaderboard',defaultNameNotice:'You are still using the default name Player. Scores from this session will not be recorded to the online leaderboard.',defaultNameContinue:'Continue Without Ranking',defaultNameBack:'Back to Main Menu',defaultNameRename:'Change Name',spectating:'Spectating',spectateNone:'No living teammate to spectate.',spectateHint:'Q / E to switch players'},
+  zh:{kills:'击杀',score:'分数',hp:'生命',ammo:'子弹',weapon:'武器',reserve:'备弹',grenades:'投掷物',time:'时间',wave:'波次',best:'最高分',shotgun:'霰弹枪',gatling:'加特林',rocket:'火箭发射器',flamethrower:'喷火器',reload:'换弹中',title:'DEAD TOWN',desc:'',tip:'',start1:'一座死城已被无尽感染者吞没，而你是仍在战斗的幸存者之一。',start2:'这是一款以高速战斗、割草清怪和武器空投为核心的丧尸题材 PVE 生存游戏，未来也许会加入多人合作模式。',start3:'点击开始按钮进入游戏',startBtn:'开始游戏',returnMenu:'返回主菜单',dead:'你死了',survive:'存活',restart:'重新开始',mainMenu:'主菜单',boss:'Boss 已出现！',airdrop:'空投已抵达！',bossHp:'Boss生命',paused:'已暂停',pauseHint:'按 P 或 Esc 继续',pauseLabel:'P / Esc 暂停',loading:'正在初始化信号...',loadingReady:'信号稳定，正在打开菜单...',serumDamage:'已获得血清：伤害 +10%',serumSpeed:'已获得血清：移速 +5%',serumHealth:'已获得血清：生命上限 +15',changeGrenadeKey:'手榴弹键位',changeMolotovKey:'燃烧瓶键位',openKeybindMenu:'Control',backBtn:'返回',keybindTitle:'键位设置',keybindHint:'只能使用 A-Z 和 0-9。当前：手榴弹 {grenade} · 燃烧瓶 {molotov}',keyPromptGrenade:'设置手榴弹键位（A-Z 或 0-9）：',keyPromptMolotov:'设置燃烧瓶键位（A-Z 或 0-9）：',keyInvalid:'只能输入单个 A-Z 或 0-9 键位。',keyConflict:'这个键位已经被另一个投掷物占用了，请换一个。',openKeybindMenu:'键位设置',backBtn:'返回',devUnlock:'开发者',devUnlockPrompt:'输入开发者密码：',devUnlockFail:'密码错误。',devUnlocked:'开发者模式已开启。',devPanel:'开发者面板',devShotgun:'霰弹枪',devGatling:'加特林',devRocket:'火箭筒',devFlame:'喷火器',devHeal:'回血',devThrowables:'投掷物',devCharger:'冲锋怪',devBoss:'Boss',mobileFullscreenTip:'如果想获得接近全屏的手机显示效果，请先将这个网页添加到手机主屏幕，然后再从主屏幕启动游戏。',mobileRoll:'翻滚',mobileGrenade:'手雷',mobileFire:'燃烧瓶',createdBy:'作者',assistedBy:'本游戏在 ChatGPT 的协助下完成',nameLabel:'名字',leaderboardTitle:'全球前十排行榜',leaderboardLoading:'排行榜加载中...',leaderboardEmpty:'暂时还没有成绩。',leaderboardError:'排行榜暂时不可用。',leaderboardRefresh:'刷新',leaderboardSyncing:'正在同步成绩...',youTag:'当前',chooseDevice:'请选择你的设备后再开始。',devicePc:'电脑',deviceMobile:'手机',rotateTitle:'旋转设备',rotateDesc:'手机模式建议横屏游玩。请将手机横过来继续。',devBoss:'首领',defaultNameTitle:'需要先修改名字',defaultNameNotice:'你当前仍在使用默认名字 Player。本局成绩不会记录到后端排行榜。',defaultNameContinue:'继续游玩但不计排行',defaultNameBack:'返回主页面',defaultNameRename:'修改名字',spectating:'观战中',spectateNone:'没有可观战的存活队友。',spectateHint:'按 Q / E 切换观战玩家'}
 };
 let lang='en';
 const $=id=>document.getElementById(id);
@@ -1975,9 +1982,12 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
   online.authPickups = [];
   online.authAirdrops = [];
   online.authFireZones = [];
+  online.authThrowables = [];
   online.authEffects = [];
   online.seenEffectIds = new Set();
   online.selfState = null;
+  online.spectating = false;
+  online.spectateId = null;
 
   function ot(){ return ONLINE_T[lang] || ONLINE_T.en; }
   function onlineStatusText(){
@@ -2025,9 +2035,13 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     online.authPickups = [];
     online.authAirdrops = [];
     online.authFireZones = [];
+    online.authThrowables = [];
     online.authEffects = [];
     online.seenEffectIds = new Set();
     online.selfState = null;
+    online.spectating = false;
+    online.spectateId = null;
+    updateSpectateUI();
     if(!keepConnection){ online.connected=false; online.connecting=false; online.clientId=null; online.state='idle'; }
   }
 
@@ -2168,6 +2182,7 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       online.authPickups = Array.isArray(msg.pickups) ? msg.pickups.map(v=>Object.assign({}, v)) : [];
       online.authAirdrops = Array.isArray(msg.airdrops) ? msg.airdrops.map(v=>Object.assign({}, v)) : [];
       online.authFireZones = Array.isArray(msg.fireZones) ? msg.fireZones.map(v=>Object.assign({}, v)) : [];
+      online.authThrowables = Array.isArray(msg.throwables) ? msg.throwables.map(v=>Object.assign({}, v)) : [];
       online.authEffects = Array.isArray(msg.effects) ? msg.effects.map(v=>Object.assign({}, v)) : [];
       if(Number.isFinite(msg.wave)) online.authWave = msg.wave;
       return;
@@ -2304,6 +2319,9 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     online.authWave=1;
     online.selfState=null;
     online.gameMode='single';
+    online.spectating=false;
+    online.spectateId=null;
+    updateSpectateUI();
     return __origGoToMainMenu();
   };
 
@@ -2341,12 +2359,21 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
   function onlineCloneFireZones(){
     return (online.authFireZones||[]).map(v=>Object.assign({}, v));
   }
+  function onlineCloneThrowables(){
+    return (online.authThrowables||[]).map(v=>Object.assign({}, v));
+  }
+  function onlineBloaterBurstVisual(x, y){
+    state.explosions.push({x,y,radius:0,maxRadius:74,life:0.22,maxLife:0.22,ring:0,rocket:false,bloaterBurst:true});
+    for(let i=0;i<18;i++){const a=Math.random()*Math.PI*2,s=rand(40,180);state.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-rand(10,40),life:rand(0.18,0.38),maxLife:0.38,size:rand(2,5),color:Math.random()>0.45?'rgba(140,210,90,0.75)':'rgba(110,160,70,0.6)',drag:0.93});}
+    state.cameraShake=Math.max(state.cameraShake,4.5);
+  }
   function onlineApplyEffects(){
     for(const fx of (online.authEffects||[])){
       if(!fx || fx.id==null || online.seenEffectIds.has(fx.id)) continue;
       online.seenEffectIds.add(fx.id);
       if(fx.kind==='molotov') onlineVisualExplode({x:fx.x,y:fx.y}, 'molotov');
       else if(fx.kind==='rocket') onlineVisualExplode({x:fx.x,y:fx.y}, 'rocket');
+      else if(fx.kind==='bloater') onlineBloaterBurstVisual(fx.x, fx.y);
       else onlineVisualExplode({x:fx.x,y:fx.y}, 'normal');
     }
   }
@@ -2372,9 +2399,6 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       player.speedMul = Math.max(0.1, Number(online.selfState.speedMul ?? player.speedMul));
       state.score = Number(online.selfState.score ?? state.score);
       state.kills = Number(online.selfState.kills ?? state.kills);
-      if(player.hp<=0 && !state.gameOver){
-        endGame();
-      }
     }
   }
   function onlineSendHitReport(zombieId, damage, weapon){
@@ -2483,7 +2507,11 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
           grenades: player.grenades, molotovs: player.molotovs,
           damageMul: player.damageMul, speedMul: player.speedMul,
           maxHp: player.maxHp,
-          moving: !!(mouseDown || touchState.shootHeld),
+          moving: !!(Math.abs(mx)>0.08 || Math.abs(my)>0.08),
+          aimAngle: Math.atan2((camera().y+state.mouse.y)-player.y,(camera().x+state.mouse.x)-player.x),
+          dashTime: player.dashTime,
+          rocketJumpTime: player.rocketJumpTime,
+          knockbackTime: player.knockbackTime,
           name: state.playerName,
         }
       });
@@ -2494,42 +2522,211 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
   function drawRemotePlayer(peer, cam){
     const s = worldToScreen(peer.x||0, peer.y||0, cam), x=Math.round(s.x), y=Math.round(s.y);
     const facing = (peer.faceDir||1) < 0 ? -1 : 1;
+    const moving = !!peer.moving;
+    const animT = performance.now()*0.008 + ((peer.id||'').length*0.5);
+    const step = moving ? Math.sin(animT)*2 : 0;
+    const dashSpin = (peer.dashTime||0) > 0.01 ? (1-(peer.dashTime/0.18))*Math.PI*2*facing : 0;
+    const liftArc = (peer.rocketJumpTime||0) > 0.01 ? Math.sin((1-(peer.rocketJumpTime/0.5))*Math.PI)*44 : (peer.knockbackTime||0)>0.01 ? 12 : 0;
+    const drawY = y - liftArc;
+    const shadowScale = liftArc>0 ? 0.62 : 1;
     const body = '#6ca9ff';
     const shirt = '#2c5d8f';
-    pxRect(x-6,y-8,12,10,'#bca18f');
-    pxRect(x-7,y+2,14,10,shirt);
-    pxRect(x-7,y+12,4,6,'#242424');
-    pxRect(x+3,y+12,4,6,'#242424');
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
-    ctx.fillRect(x-10,y+18,20,4);
-    drawRotatedGun(x+(facing>0?5:-5), y+5, facing>0?0:Math.PI, body, '#d6b07a', peer.weapon||'shotgun');
+    ctx.fillStyle='rgba(0,0,0,0.22)';
+    ctx.fillRect(Math.round(x-10*shadowScale), Math.round(y+18), Math.round(20*shadowScale), 4);
+    ctx.save();
+    ctx.translate(x, drawY+5);
+    if(dashSpin) ctx.rotate(dashSpin);
+    pxRect(-6,-13,12,10,'#bca18f');
+    pxRect(-7,-3,14,10,shirt);
+    pxRect(-8,-2,3,8,'#bca18f');
+    pxRect(5,-2,3,8,'#bca18f');
+    pxRect(-7,7+step,4,6,'#242424');
+    pxRect(3,7-step,4,6,'#242424');
+    ctx.restore();
+    const gunAngle = Number.isFinite(peer.aimAngle) ? peer.aimAngle : (facing>0?0:Math.PI);
+    drawRotatedGun(x+(facing>0?5:-5), drawY+5, gunAngle, body, '#d6b07a', peer.weapon||'shotgun');
     ctx.font='12px Courier New';
     ctx.textAlign='center';
+    const label = `${String(peer.name||'Player')}${peer.dead?' ☠':''}`;
     ctx.fillStyle='rgba(0,0,0,0.65)';
-    ctx.fillText(String(peer.name||'Player'), x+1, y-13+1);
+    ctx.fillText(label, x+1, drawY-13+1);
     ctx.fillStyle='#9cc2ff';
-    ctx.fillText(String(peer.name||'Player'), x, y-13);
+    ctx.fillText(label, x, drawY-13);
     const barW=22, ratio=Math.max(0,Math.min(1,(peer.hp||0)/(peer.maxHp||100)));
-    pxRect(x-barW/2,y-28,barW,4,'rgba(255,255,255,0.12)');
-    pxRect(x-barW/2,y-28,barW*ratio,4,'#59c36a');
+    pxRect(x-barW/2,drawY-28,barW,4,'rgba(255,255,255,0.12)');
+    pxRect(x-barW/2,drawY-28,barW*ratio,4,peer.dead?'#aa5555':'#59c36a');
   }
-
+  function drawOnlineThrowable(th, cam){
+    const sx = (th.drawX||th.x||0) - cam.x;
+    const sy = (th.drawY||th.y||0) - cam.y;
+    const groundY = (th.y||0) - cam.y;
+    ctx.fillStyle='rgba(0,0,0,0.18)';
+    ctx.fillRect(Math.round(sx-7), Math.round(groundY+8), 14, 3);
+    if(th.type==='molotov'){
+      pxRect(sx-3, sy-7, 6, 14, '#6b3f1d');
+      pxRect(sx-2, sy-9, 4, 3, '#d9b27a');
+      pxRect(sx-1, sy-12, 2, 3, '#ffb347');
+    }else{
+      pxRect(sx-4, sy-4, 8, 8, '#6b6b6b');
+      pxRect(sx-1, sy-7, 2, 3, '#4a4a4a');
+    }
+  }
+  function onlineAlivePeers(){
+    return Object.values(online.peers||{}).filter(p=>!p.dead && (p.hp||0)>0);
+  }
+  function ensureSpectateTarget(){
+    const alive = onlineAlivePeers();
+    if(!alive.length){ online.spectateId = null; return null; }
+    let target = alive.find(p=>p.id===online.spectateId);
+    if(!target){ target = alive[0]; online.spectateId = target.id; }
+    return target;
+  }
+  function cycleSpectateTarget(dir=1){
+    const alive = onlineAlivePeers();
+    if(!alive.length){ online.spectateId = null; updateSpectateUI(); return; }
+    let idx = alive.findIndex(p=>p.id===online.spectateId);
+    if(idx<0) idx = 0;
+    idx = (idx + dir + alive.length) % alive.length;
+    online.spectateId = alive[idx].id;
+    updateSpectateUI();
+  }
+  function updateSpectateUI(){
+    const bar = $('spectateBar');
+    const label = $('spectateLabel');
+    if(!bar || !label) return;
+    const show = !!(online.spectating && online.gameMode==='online' && state.running && !state.gameOver);
+    bar.classList.toggle('show', show);
+    if(!show) return;
+    const target = ensureSpectateTarget();
+    const t = T[lang];
+    label.textContent = target ? `${t.spectating}: ${target.name} · ${t.spectateHint}` : t.spectateNone;
+  }
   const __origRender = render;
   render = function(){
     __origRender();
     if(!(online.connected && online.started && state.running && !state.gameOver)) return;
     const cam = camera();
+    for(const th of (online.authThrowables||[])) drawOnlineThrowable(th, cam);
     Object.values(online.peers).forEach(peer=>drawRemotePlayer(peer, cam));
+    updateSpectateUI();
     ctx.textAlign='left';
     ctx.font='bold 12px Courier New';
     ctx.fillStyle='rgba(0,0,0,0.55)';
-    ctx.fillRect(12, SH-78, 250, 62);
+    ctx.fillRect(12, SH-78, 290, 62);
     ctx.fillStyle='#9cc2ff';
     ctx.fillText(`${ot().onlinePreview}`, 20, SH-54);
     ctx.fillStyle='#f0e6d8';
     ctx.fillText(`${ot().peers}: ${Object.keys(online.peers).length}`, 20, SH-36);
     ctx.fillText(`${T[lang].wave}: ${online.authWave||state.wave} · Zombies: ${(online.authZombies||[]).length}`, 20, SH-18);
   };
+
+  const __origThrowThrowable = throwThrowable;
+  throwThrowable = function(kind='grenade'){
+    if(!(online.connected && online.started && state.running && !state.gameOver && online.gameMode==='online')) return __origThrowThrowable(kind);
+    if(online.spectating) return;
+    const isMolotov=kind==='molotov';
+    if(isMolotov&&player.molotovs<=0)return;
+    if(!isMolotov&&player.grenades<=0)return;
+    const cam=camera(),worldMouseX=cam.x+state.mouse.x,worldMouseY=cam.y+state.mouse.y;
+    onlineSend({ type:'throw_report', kind, targetX:worldMouseX, targetY:worldMouseY });
+  };
+  const __origThrowThrowableAt = throwThrowableAt;
+  throwThrowableAt = function(kind,targetX,targetY){
+    if(!(online.connected && online.started && state.running && !state.gameOver && online.gameMode==='online')) return __origThrowThrowableAt(kind,targetX,targetY);
+    if(online.spectating) return;
+    const isMolotov=kind==='molotov';
+    if(isMolotov&&player.molotovs<=0)return;
+    if(!isMolotov&&player.grenades<=0)return;
+    onlineSend({ type:'throw_report', kind, targetX, targetY });
+  };
+  const __origShoot = shoot;
+  shoot = function(){ if(online.spectating) return; return __origShoot(); };
+  const __origStartReload = startReload;
+  startReload = function(){ if(online.spectating) return; return __origStartReload(); };
+  const __origStartDashFromVector = startDashFromVector;
+  startDashFromVector = function(dx,dy){ if(online.spectating) return; return __origStartDashFromVector(dx,dy); };
+
+  const __origCameraPhase3 = camera;
+  camera = function(){
+    if(online.spectating && online.gameMode==='online' && state.running && !state.gameOver){
+      const target = ensureSpectateTarget();
+      if(target){
+        const shakeX=state.cameraShake>0?rand(-state.cameraShake,state.cameraShake):0;
+        const shakeY=state.cameraShake>0?rand(-state.cameraShake,state.cameraShake):0;
+        return {x:clamp((target.x||0)-SW/2+shakeX,0,WORLD.w-SW),y:clamp((target.y||0)-SH/2+shakeY,0,WORLD.h-SH)};
+      }
+    }
+    return __origCameraPhase3();
+  };
+
+  function onlineLocalZombieCollision(){
+    if(online.spectating) return;
+    for(const z of (online.authZombies||[])){
+      const proxy = { x: player.x, y: player.y, radius: player.radius };
+      softSeparate(proxy, { x:z.x, y:z.y, radius:z.radius||12 }, 0.28);
+      player.x = clamp(proxy.x, player.radius+2, WORLD.w-(player.radius+2));
+      player.y = clamp(proxy.y, player.radius+2, WORLD.h-(player.radius+2));
+    }
+  }
+
+  const __origEndGamePhase3 = endGame;
+  endGame = function(){
+    if(online.gameMode==='online' && online.started && !state.gameOver){
+      const alivePeers = onlineAlivePeers();
+      if(player.hp<=0 && alivePeers.length){
+        online.spectating = true;
+        if(!online.spectateId || !alivePeers.some(p=>p.id===online.spectateId)) online.spectateId = alivePeers[0].id;
+        pushOnlineNotice(lang==='zh' ? `你已死亡，正在观战 ${alivePeers[0].name}。` : `You died. Spectating ${alivePeers[0].name}.`, 'warn', 3400);
+        updateSpectateUI();
+        return;
+      }
+    }
+    return __origEndGamePhase3();
+  };
+
+  const __origUpdatePhase3 = update;
+  update = function(dt){
+    if(online.spectating){
+      mouseDown = false;
+      touchState.shootHeld = false;
+      touchState.move.active = false;
+      touchState.aim.active = false;
+      state.keys.clear();
+    }
+    const ret = __origUpdatePhase3(dt);
+    if(online.gameMode==='online' && online.started && state.running && !state.gameOver){
+      if(player.hp<=0){
+        const target = ensureSpectateTarget();
+        if(target){
+          online.spectating = true;
+        }else{
+          online.spectating = false;
+          __origEndGamePhase3();
+        }
+      }else{
+        online.spectating = false;
+      }
+      onlineLocalZombieCollision();
+      updateSpectateUI();
+    } else if(online.spectating){
+      online.spectating = false;
+      online.spectateId = null;
+      updateSpectateUI();
+    }
+    return ret;
+  };
+
+  window.addEventListener('keydown', (e)=>{
+    if(!(online.spectating && online.gameMode==='online')) return;
+    const k = e.key.toLowerCase();
+    if(k==='q'){ cycleSpectateTarget(-1); e.preventDefault(); }
+    if(k==='e'){ cycleSpectateTarget(1); e.preventDefault(); }
+  });
+  setTimeout(()=>{
+    const prev=$('spectatePrevBtn'); if(prev) prev.onclick=()=>cycleSpectateTarget(-1);
+    const next=$('spectateNextBtn'); if(next) next.onclick=()=>cycleSpectateTarget(1);
+    updateSpectateUI();
+  },0);
 })();
 </script>
 
