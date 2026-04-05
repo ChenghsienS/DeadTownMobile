@@ -74,6 +74,16 @@ function cancelCountdown(room) {
     room.countdownTimer = null;
   }
 }
+function forceStartMatch(room) {
+  if (!room || room.started) return;
+  cancelCountdown(room);
+  room.started = true;
+  room.worldSeed = Math.floor(Math.random() * 2147483647);
+  const payload = { type: 'match_started', room: roomPayload(room), worldSeed: room.worldSeed };
+  for (const p of room.players) send(p.ws, payload);
+  broadcastRoomList();
+}
+
 
 function maybeStartCountdown(room) {
   if (room.started) return;
@@ -99,12 +109,7 @@ function maybeStartCountdown(room) {
       broadcastRoomUpdate(current);
       return;
     }
-    current.started = true;
-    current.countdownEndsAt = null;
-    current.worldSeed = Math.floor(Math.random() * 2147483647);
-    const payload = { type: 'match_started', room: roomPayload(current), worldSeed: current.worldSeed };
-    for (const p of current.players) send(p.ws, payload);
-    broadcastRoomList();
+    forceStartMatch(current);
   }, 5000);
   broadcastRoomUpdate(room);
 }
@@ -238,6 +243,14 @@ wss.on('connection', (ws) => {
       player.ready = !player.ready;
       broadcastRoomUpdate(room);
       maybeStartCountdown(room);
+      return;
+    }
+
+    if (msg.type === 'start_match') {
+      const room = rooms.get(c.roomId);
+      if (!room || room.started) return;
+      if (room.hostId !== c.id) return send(ws, { type: 'error', message: 'Only the host can start the match.' });
+      forceStartMatch(room);
       return;
     }
 
