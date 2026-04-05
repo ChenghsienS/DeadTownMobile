@@ -287,6 +287,7 @@
     return '';
   }
 
+
   function onlineAudioListenerPos(){
     const target = onlineSpectateTarget();
     if(target && online.spectating) return { x: target.displayX ?? target.x ?? player.x, y: target.displayY ?? target.y ?? player.y };
@@ -389,14 +390,16 @@
     const error = Math.hypot(dx, dy);
     const serverKnockback = (self.knockbackTime||0) > 0.02;
     const carriedByCharger = !!self.carryingByCharger;
+    const serverZombiePush = (self.zombiePushTime||0) > 0.02;
     const inBurstMove = (player.dashTime||0) > 0 || (player.rocketJumpTime||0) > 0 || (player.knockbackTime||0) > 0;
-    if(!state.running || error > 96 || carriedByCharger || serverKnockback){
+    if(!state.running || error > 96 || carriedByCharger || serverKnockback || serverZombiePush){
       player.x = self.x;
       player.y = self.y;
     }else if(!inBurstMove && error > 14){
       player.x += dx * 0.18;
       player.y += dy * 0.18;
     }
+    player.zombiePushTime = Math.max(player.zombiePushTime||0, self.zombiePushTime||0);
     player.hp = self.hp;
     player.maxHp = self.maxHp;
     player.faceDir = self.faceDir || player.faceDir || 1;
@@ -611,8 +614,8 @@
       online.syncedFlameFx = [];
       online.remoteParticles = [];
       online.seenEffectIds = new Set();
-      online.seenBloodIds = new Set();
-      online.seenSoundIds = new Set();
+    online.seenBloodIds = new Set();
+    online.seenSoundIds = new Set();
       renderOnlineLobby();
       return;
     }
@@ -633,6 +636,8 @@
       state.fireZones = [];
       online.remoteParticles = [];
       online.seenEffectIds = new Set();
+    online.seenBloodIds = new Set();
+    online.seenSoundIds = new Set();
       return;
     }
     if(msg.type === 'room_closed'){
@@ -647,6 +652,8 @@
       online.syncedFlameFx = [];
       online.remoteParticles = [];
       online.seenEffectIds = new Set();
+    online.seenBloodIds = new Set();
+    online.seenSoundIds = new Set();
       online.gameMode = 'single';
       const rawMessage = String(msg.message || '');
       const hostNameMatch = rawMessage.match(/^(.*?)\s(?:disconnected\.|closed the room\.)/i);

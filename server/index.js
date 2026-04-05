@@ -352,6 +352,7 @@ function createPlayerState(client) {
     knockbackVX: 0,
     knockbackVY: 0,
     carryingByCharger: null,
+    zombiePushTime: 0,
     hurtTimer: 0,
     faceDir: 1,
     aimAngle: 0,
@@ -1113,17 +1114,6 @@ function processDamageTexts(room, dt) {
     if (t.life <= 0) room.match.damageTexts.splice(i, 1);
   }
 }
-
-function processTransientEventFx(room, dt) {
-  for (let i = room.match.bloodFx.length - 1; i >= 0; i -= 1) {
-    room.match.bloodFx[i].life -= dt;
-    if (room.match.bloodFx[i].life <= 0) room.match.bloodFx.splice(i, 1);
-  }
-  for (let i = room.match.soundFx.length - 1; i >= 0; i -= 1) {
-    room.match.soundFx[i].life -= dt;
-    if (room.match.soundFx[i].life <= 0) room.match.soundFx.splice(i, 1);
-  }
-}
 function applyExplosion(room, sourcePlayer, x, y, kind = 'normal') {
   if (kind === 'molotov') {
     room.match.fireZones.push({ id: room.match.nextEntityId++, x, y, radius: 96, life: 6, maxLife: 6, hitTick: 0, ownerId: sourcePlayer?.id || null });
@@ -1335,6 +1325,8 @@ function updateZombies(room, dt) {
     if ((player.rocketJumpTime || 0) <= 0) {
       for (let i = 0; i < match.zombies.length; i += 1) {
         const z = match.zombies[i];
+        const prevPlayerX = player.x;
+        const prevPlayerY = player.y;
         softSeparate(player, z, z.type === 'boss' ? 0.22 : 0.18);
         player.x = clamp(player.x, player.radius + 2, WORLD.w - (player.radius + 2));
         player.y = clamp(player.y, player.radius + 2, WORLD.h - (player.radius + 2));
@@ -1342,6 +1334,9 @@ function updateZombies(room, dt) {
         z.y = clamp(z.y, 10, WORLD.h - 10);
         collideWithBuildings(room.world, z);
         collideWithBuildings(room.world, player);
+        if (Math.hypot(player.x - prevPlayerX, player.y - prevPlayerY) > 0.08) {
+          player.zombiePushTime = Math.max(player.zombiePushTime || 0, 0.12);
+        }
       }
     }
   }
@@ -1584,7 +1579,7 @@ function updatePlayerFromClient(client, state) {
   const incomingDashTime = Number.isFinite(state.dashTime) ? Math.max(0, Number(state.dashTime) || 0) : 0;
   if (incomingDashTime > 0.12 && (player.dashTime || 0) <= 0.02) pushSoundFx(room, 'dash', player.x, player.y, { ownerId: player.id });
   if (Number.isFinite(state.dashTime)) player.dashTime = Math.max(player.dashTime || 0, incomingDashTime);
-  if (!(player.carryingByCharger || (player.knockbackTime || 0) > 0 || (player.zombiePushTime || 0) > 0) && Number.isFinite(state.x) && Number.isFinite(state.y)) {
+  if (!(player.carryingByCharger || (player.knockbackTime || 0) > 0) && Number.isFinite(state.x) && Number.isFinite(state.y)) {
     player.x = clamp(Number(state.x), player.radius + 2, WORLD.w - (player.radius + 2));
     player.y = clamp(Number(state.y), player.radius + 2, WORLD.h - (player.radius + 2));
     collideWithBuildings(room.world, player);
@@ -1709,7 +1704,6 @@ function updateRoom(room, dt) {
   processEffects(room, dt);
   processShotFx(room, dt);
   processDamageTexts(room, dt);
-  processTransientEventFx(room, dt);
   if (!livingPlayers(room).length) endMatch(room, 'All players were defeated.');
 }
 
