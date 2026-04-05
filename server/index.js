@@ -574,10 +574,15 @@ function addScore(player, value) {
 }
 function damagePlayerServer(room, player, amount) {
   if (!player || !player.alive || player.hp <= 0) return;
+  const wasAlive = player.alive && player.hp > 0;
   player.hp = Math.max(0, player.hp - amount);
   if (player.hp <= 0) {
     player.hp = 0;
     player.alive = false;
+    if (wasAlive) {
+      const clientRef = clients.get(player.id);
+      broadcastToRoom(room, { type: 'player_down', playerId: player.id, name: clientRef?.name || player.name || 'Player' });
+    }
   }
 }
 function awardSerum(player, buff) {
