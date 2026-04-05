@@ -867,6 +867,9 @@
   function updateOnlineRemoteVisuals(dt){
     const now = performance.now();
     for(const peer of Object.values(online.peers)){
+      peer.dashTime = Math.max(0, (peer.dashTime || 0) - dt);
+      peer.rocketJumpTime = Math.max(0, (peer.rocketJumpTime || 0) - dt);
+      peer.knockbackTime = Math.max(0, (peer.knockbackTime || 0) - dt);
       const age = Math.min(0.1, Math.max(0, (now - (peer.lastSeen || now)) / 1000));
       const targetX = (peer.targetX ?? peer.x ?? 0) + (peer.vx || 0) * age;
       const targetY = (peer.targetY ?? peer.y ?? 0) + (peer.vy || 0) * age;
@@ -875,6 +878,9 @@
       else peer.displayX += (targetX - peer.displayX) * blend;
       if(!Number.isFinite(peer.displayY) || Math.abs(targetY - peer.displayY) > 160) peer.displayY = targetY;
       else peer.displayY += (targetY - peer.displayY) * blend;
+      if((peer.dashTime||0) > 0){
+        spawnDashDustAt(peer.displayX||peer.x||0, peer.displayY||peer.y||0, peer.dashVX||0, peer.dashVY||0);
+      }
     }
 
     for(let i=online.syncedProjectiles.length-1;i>=0;i--){
@@ -908,9 +914,9 @@
         continue;
       }
       if(p.kind === 'pellet'){
-        p.x = (p.x || 0) + (p.vx || 0) * dt;
-        p.y = (p.y || 0) + (p.vy || 0) * dt;
-        p.life = Math.max(0, (p.life || 0) - dt);
+        const pelletArray = [p];
+        updateVisualPelletArray(pelletArray, dt);
+        if(pelletArray.length === 0) online.syncedProjectiles.splice(i,1);
         continue;
       }
       if(p.kind === 'flame'){
@@ -940,6 +946,79 @@
       if(p.floaty) p.vy -= 18 * dt;
       p.life -= dt;
       if(p.life <= 0) online.remoteParticles.splice(i,1);
+    }
+  }
+
+  function updateVisualPelletArray(pelletArray, dt){
+    for(let i=pelletArray.length-1;i>=0;i--){
+      const p=pelletArray[i], prevX=p.x, prevY=p.y;
+      p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt;
+      let removed=false;
+      for(const b of WORLD.buildings){
+        for(const wr of getBuildingWallRects(b)){
+          if(lineIntersectsRect(prevX,prevY,p.x,p.y,wr) || circleRectCollision(p.x,p.y,p.radius||2,wr)){
+            pelletArray.splice(i,1); removed=true; break;
+          }
+        }
+        if(removed) break;
+      }
+      if(removed) continue;
+      for(let j=state.zombies.length-1;j>=0;j--){
+        const z=state.zombies[j];
+        if((p.hitIds||[]).includes(z.id)) continue;
+        if(dist(z.x,z.y,p.x,p.y) < z.radius + (p.radius||2) + 1){
+          p.hitIds = p.hitIds || [];
+          p.hitIds.push(z.id);
+          if(p.penetration != null){
+            p.penetration -= 1;
+            if(p.penetration <= 0){ pelletArray.splice(i,1); }
+          }else{
+            pelletArray.splice(i,1);
+          }
+          removed = true;
+          break;
+        }
+      }
+      if(removed) continue;
+      if(p.life<=0||p.x<-20||p.x>WORLD.w+20||p.y<-20||p.y>WORLD.h+20) pelletArray.splice(i,1);
+    }
+  }
+
+  function spawnDashDustAt(x,y,dashVX,dashVY){
+    if(Math.random()<0.95){
+      for(let d=0;d<2;d++){
+        state.particles.push({
+          x:x-rand(-6,6),
+          y:y+10-rand(0,4),
+          vx:rand(-40,40)-(dashVX||0)*0.05,
+          vy:rand(-18,6),
+          life:rand(0.18,0.38),
+          maxLife:0.38,
+          size:rand(4,7),
+          color:Math.random()>0.5?'rgba(168,142,98,0.34)':'rgba(110,102,88,0.30)',
+          drag:0.92,
+          floaty:true
+        });
+      }
+    }
+  }
+
+  function emitOnlineFireZoneParticles(){
+    for(const zone of state.fireZones){
+      for(let s=0;s<2;s++){
+        const a=Math.random()*Math.PI*2,r=Math.random()*zone.radius*0.9;
+        state.particles.push({
+          x:zone.x+Math.cos(a)*r,
+          y:zone.y+Math.sin(a)*r,
+          vx:rand(-16,16),
+          vy:rand(-36,-8),
+          life:rand(0.16,0.34),
+          maxLife:0.34,
+          size:rand(4,8),
+          color:Math.random()>0.45?'rgba(255,210,70,0.82)':'rgba(255,110,30,0.72)',
+          drag:0.92
+        });
+      }
     }
   }
 
@@ -994,21 +1073,7 @@
       }
       if(f.life<=0) state.flameParticles.splice(i,1);
     }
-    for(let i=state.pellets.length-1;i>=0;i--){
-      const p=state.pellets[i], prevX=p.x, prevY=p.y;
-      p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt;
-      let removed=false;
-      for(const b of WORLD.buildings){
-        for(const wr of getBuildingWallRects(b)){
-          if(lineIntersectsRect(prevX,prevY,p.x,p.y,wr) || circleRectCollision(p.x,p.y,p.radius,wr)){
-            state.pellets.splice(i,1); removed=true; break;
-          }
-        }
-        if(removed) break;
-      }
-      if(removed) continue;
-      if(p.life<=0||p.x<-20||p.x>WORLD.w+20||p.y<-20||p.y>WORLD.h+20) state.pellets.splice(i,1);
-    }
+    updateVisualPelletArray(state.pellets, dt);
     for(let i=state.particles.length-1;i>=0;i--){
       const p=state.particles[i];
       p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=p.drag||0.95; p.vy*=p.drag||0.95; if(p.floaty)p.vy-=18*dt; p.life-=dt;
@@ -1119,6 +1184,8 @@
 
     updateOnlineRemoteVisuals(dt);
     updateOnlineVisualProjectiles(dt);
+    if(player.dashTime>0) spawnDashDustAt(player.x, player.y, player.dashVX||0, player.dashVY||0);
+    emitOnlineFireZoneParticles();
     updateBuildingRoofs();
     bindMenuButtons();
     bindOnlineDevButtons();
@@ -1130,7 +1197,19 @@
       if(!spectating){
         onlineSend({
           type:'player_state',
-          state:{ x:player.x, y:player.y, faceDir:player.faceDir, aimAngle:Math.atan2((camera().y+state.mouse.y)-player.y,(camera().x+state.mouse.x)-player.x), moving:!!(mx||my||mouseDown||touchState.shootHeld), name:state.playerName }
+          state:{
+            x:player.x,
+            y:player.y,
+            faceDir:player.faceDir,
+            aimAngle:Math.atan2((camera().y+state.mouse.y)-player.y,(camera().x+state.mouse.x)-player.x),
+            moving:!!(mx||my||mouseDown||touchState.shootHeld),
+            name:state.playerName,
+            dashTime:player.dashTime||0,
+            dashVX:player.dashVX||0,
+            dashVY:player.dashVY||0,
+            dashFacing:player.dashFacing||0,
+            dashSpinDir:player.dashSpinDir||1
+          }
         });
       }
     }
@@ -1283,22 +1362,32 @@
     const x=baseX,y=px(baseY-lift);
     const alive = !!peer.alive && (peer.hp||0) > 0;
     const worldMouseAngle = Number.isFinite(peer.aimAngle) ? peer.aimAngle : (((peer.faceDir||1)<0)?Math.PI:0);
-    const moveAng=(peer.rocketJumpTime||0)>0?Math.atan2(peer.rocketJumpVY||0,peer.rocketJumpVX||1):worldMouseAngle;
+    let weaponAng = worldMouseAngle;
+    const faceDir=(peer.faceDir||1)<0?-1:1;
+    const dashFacing = Number.isFinite(peer.dashFacing) ? peer.dashFacing : Math.atan2(peer.dashVY||0, peer.dashVX||faceDir||1);
+    if((peer.dashTime||0)>0) weaponAng = dashFacing;
+    else if((peer.rocketJumpTime||0)>0) weaponAng = Math.atan2(peer.rocketJumpVY||0,peer.rocketJumpVX||peer.faceDir||1);
+    else if((peer.knockbackTime||0)>0) weaponAng = Math.atan2(peer.knockbackVY||0,peer.knockbackVX||peer.faceDir||1);
+    else weaponAng = (peer.faceDir||1)<0?Math.PI:worldMouseAngle;
+    const moveAng=(peer.dashTime||0)>0?dashFacing:(peer.rocketJumpTime||0)>0?Math.atan2(peer.rocketJumpVY||0,peer.rocketJumpVX||1):weaponAng;
     pxRect(baseX-11*jumpVisual.shadowScale,baseY+12,22*jumpVisual.shadowScale,5,'rgba(0,0,0,0.2)');
-    if((peer.rocketJumpTime||0)>0){
-      const spinBase=1-((peer.rocketJumpTime||0)/ROCKET_JUMP_DURATION);
-      const spin=spinBase*Math.PI*2*(peer.faceDir<0?-1:1);
+    if((peer.dashTime||0)>0 || (peer.rocketJumpTime||0)>0){
       for(let i=3;i>=1;i--){
         const trailX=x-Math.cos(moveAng)*i*7,trailY=y-Math.sin(moveAng)*i*7;
         ctx.fillStyle=`rgba(255,190,120,${0.09*i})`;
         ctx.fillRect(px(trailX-7),px(trailY-7),14,18);
       }
-      ctx.fillStyle='rgba(0,0,0,0.65)';
-      ctx.font='12px Courier New';
-      ctx.textAlign='center';
-      ctx.fillText(String(peer.name||'Player'),x+1,y-15);
-      ctx.fillStyle=alive ? '#f0e6d8' : '#c2c2c2';
-      ctx.fillText(String(peer.name||'Player'),x,y-16);
+    }
+    ctx.fillStyle='rgba(0,0,0,0.65)';
+    ctx.font='12px Courier New';
+    ctx.textAlign='center';
+    ctx.fillText(String(peer.name||'Player'),x+1,y-15);
+    ctx.fillStyle=alive ? '#f0e6d8' : '#c2c2c2';
+    ctx.fillText(String(peer.name||'Player'),x,y-16);
+    if((peer.dashTime||0)>0 || (peer.rocketJumpTime||0)>0){
+      const spinBase=(peer.dashTime||0)>0?1-((peer.dashTime||0)/0.18):1-((peer.rocketJumpTime||0)/ROCKET_JUMP_DURATION);
+      const spinDir = Number.isFinite(peer.dashSpinDir) ? peer.dashSpinDir : (((peer.dashVX||0)<0)?-1:((peer.dashVX||0)>0?1:faceDir));
+      const spin=spinBase*Math.PI*2*spinDir;
       ctx.save();
       ctx.translate(x,y+3);
       ctx.rotate(spin);
@@ -1312,14 +1401,7 @@
       drawRotatedGun(0,4,spin, peer.weapon==='gatling'?'#545f66':peer.weapon==='rocket'?'#5a646f':peer.weapon==='flamethrower'?'#7a7a7a':'#7d614f', '#2c2c2c', peer.weapon||'shotgun');
       ctx.restore();
     }else{
-      ctx.fillStyle='rgba(0,0,0,0.65)';
-      ctx.font='12px Courier New';
-      ctx.textAlign='center';
-      ctx.fillText(String(peer.name||'Player'),x+1,y-15);
-      ctx.fillStyle=alive ? '#f0e6d8' : '#c2c2c2';
-      ctx.fillText(String(peer.name||'Player'),x,y-16);
       const faceColor=alive?'#ddd4c7':'#9a9a9a';
-      const faceDir=(peer.faceDir||1)<0?-1:1;
       pxRect(x-6,y-8,12,10,faceColor);
       pxRect(x-6,y-10,12,3,'#1c1a1a');
       pxRect(x-5,y-6,10,3,'#0a0a0a');
@@ -1328,7 +1410,7 @@
       pxRect(x-5,y+2,10,9,alive?'#3c342f':'#545454');
       pxRect(x-7,y+10,4,6,alive?'#262626':'#3c3c3c');
       pxRect(x+3,y+10,4,6,alive?'#262626':'#3c3c3c');
-      if(alive) drawRotatedGun(x,y+4,worldMouseAngle, peer.weapon==='gatling'?'#545f66':peer.weapon==='rocket'?'#5a646f':peer.weapon==='flamethrower'?'#7a7a7a':'#7d614f', '#2c2c2c', peer.weapon||'shotgun');
+      if(alive) drawRotatedGun(x,y+4,weaponAng, peer.weapon==='gatling'?'#545f66':peer.weapon==='rocket'?'#5a646f':peer.weapon==='flamethrower'?'#7a7a7a':'#7d614f', '#2c2c2c', peer.weapon||'shotgun');
     }
     const barW=22, ratio=Math.max(0,Math.min(1,(peer.hp||0)/(peer.maxHp||100)));
     pxRect(x-barW/2,y-28,barW,4,'rgba(255,255,255,0.12)');

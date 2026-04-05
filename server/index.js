@@ -345,6 +345,8 @@ function createPlayerState(client) {
     dashTime: 0,
     dashVX: 0,
     dashVY: 0,
+    dashFacing: 0,
+    dashSpinDir: 1,
     rocketJumpTime: 0,
     rocketJumpVX: 0,
     rocketJumpVY: 0,
@@ -1580,6 +1582,10 @@ function updatePlayerFromClient(client, state) {
   const incomingDashTime = Number.isFinite(state.dashTime) ? Math.max(0, Number(state.dashTime) || 0) : 0;
   if (incomingDashTime > 0.12 && (player.dashTime || 0) <= 0.02) pushSoundFx(room, 'dash', player.x, player.y, { ownerId: player.id });
   if (Number.isFinite(state.dashTime)) player.dashTime = Math.max(player.dashTime || 0, incomingDashTime);
+  if (Number.isFinite(state.dashVX)) player.dashVX = Number(state.dashVX) || 0;
+  if (Number.isFinite(state.dashVY)) player.dashVY = Number(state.dashVY) || 0;
+  if (Number.isFinite(state.dashFacing)) player.dashFacing = Number(state.dashFacing) || 0;
+  if (Number.isFinite(state.dashSpinDir)) player.dashSpinDir = (Number(state.dashSpinDir) || 0) < 0 ? -1 : 1;
   if (!(player.carryingByCharger || (player.knockbackTime || 0) > 0) && Number.isFinite(state.x) && Number.isFinite(state.y)) {
     player.x = clamp(Number(state.x), player.radius + 2, WORLD.w - (player.radius + 2));
     player.y = clamp(Number(state.y), player.radius + 2, WORLD.h - (player.radius + 2));
@@ -1613,6 +1619,11 @@ function snapshotForClient(room, client) {
     flameAmmo: p.flameAmmo,
     speedMul: p.speedMul,
     damageMul: p.damageMul,
+    dashTime: p.dashTime || 0,
+    dashVX: p.dashVX || 0,
+    dashVY: p.dashVY || 0,
+    dashFacing: p.dashFacing || 0,
+    dashSpinDir: p.dashSpinDir || 1,
     rocketJumpTime: p.rocketJumpTime || 0,
     rocketJumpVX: p.rocketJumpVX || 0,
     rocketJumpVY: p.rocketJumpVY || 0,
