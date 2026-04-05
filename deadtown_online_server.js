@@ -47,9 +47,11 @@ function roomPayload(room) {
     maxPlayers: room.maxPlayers,
     started: room.started,
     worldSeed: room.worldSeed,
+    countdownEndsAt: room.countdownEndsAt,
     players: room.players.map((p) => ({
       id: p.id,
       name: p.name,
+      ready: !!p.ready,
     })),
   };
 }
@@ -65,6 +67,48 @@ function broadcastRoomUpdate(room) {
   broadcastRoomList();
 }
 
+function cancelCountdown(room) {
+  room.countdownEndsAt = null;
+  if (room.countdownTimer) {
+    clearTimeout(room.countdownTimer);
+    room.countdownTimer = null;
+  }
+}
+
+function maybeStartCountdown(room) {
+  if (room.started) return;
+  if (room.players.length === 0) return;
+  const allReady = room.players.every((p) => !!p.ready);
+  if (!allReady) {
+    if (room.countdownEndsAt) {
+      cancelCountdown(room);
+      broadcastRoomUpdate(room);
+    }
+    return;
+  }
+  if (room.countdownEndsAt) return;
+  room.countdownEndsAt = Date.now() + 5000;
+  room.countdownTimer = setTimeout(() => {
+    room.countdownTimer = null;
+    if (!rooms.has(room.roomId)) return;
+    const current = rooms.get(room.roomId);
+    if (!current || current.started) return;
+    const stillAllReady = current.players.length > 0 && current.players.every((p) => !!p.ready);
+    if (!stillAllReady) {
+      current.countdownEndsAt = null;
+      broadcastRoomUpdate(current);
+      return;
+    }
+    current.started = true;
+    current.countdownEndsAt = null;
+    current.worldSeed = Math.floor(Math.random() * 2147483647);
+    const payload = { type: 'match_started', room: roomPayload(current), worldSeed: current.worldSeed };
+    for (const p of current.players) send(p.ws, payload);
+    broadcastRoomList();
+  }, 5000);
+  broadcastRoomUpdate(room);
+}
+
 function leaveRoom(ws) {
   const client = clients.get(ws);
   if (!client || !client.roomId) return;
@@ -76,6 +120,7 @@ function leaveRoom(ws) {
   room.states.delete(client.id);
 
   if (room.players.length === 0) {
+    cancelCountdown(room);
     clearInterval(room.tick);
     rooms.delete(room.roomId);
     broadcastRoomList();
@@ -87,6 +132,7 @@ function leaveRoom(ws) {
     room.hostName = room.players[0].name;
   }
 
+  maybeStartCountdown(room);
   send(ws, { type: 'left_room' });
   broadcastRoomUpdate(room);
 }
@@ -98,6 +144,7 @@ function startRoomTicker(room) {
     const players = room.players.map((p) => ({
       id: p.id,
       name: p.name,
+      ready: !!p.ready,
       ...(room.states.get(p.id) || {}),
     }));
     const payload = { type: 'snapshot', roomId: room.roomId, players };
@@ -151,7 +198,9 @@ wss.on('connection', (ws) => {
         maxPlayers: 4,
         started: false,
         worldSeed: null,
-        players: [{ id: c.id, name: c.name, ws }],
+        countdownEndsAt: null,
+        countdownTimer: null,
+        players: [{ id: c.id, name: c.name, ws, ready: false }],
         states: new Map(),
         tick: null,
       };
@@ -166,9 +215,10 @@ wss.on('connection', (ws) => {
     if (msg.type === 'join_room') {
       const room = rooms.get(msg.roomId);
       if (!room) return send(ws, { type: 'error', message: 'Room not found.' });
+      if (room.started) return send(ws, { type: 'error', message: 'Match already started.' });
       if (room.players.length >= room.maxPlayers) return send(ws, { type: 'error', message: 'Room full.' });
       leaveRoom(ws);
-      room.players.push({ id: c.id, name: c.name, ws });
+      room.players.push({ id: c.id, name: c.name, ws, ready: false });
       c.roomId = room.roomId;
       send(ws, { type: 'room_joined', room: roomPayload(room) });
       broadcastRoomUpdate(room);
@@ -180,15 +230,14 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    if (msg.type === 'start_match') {
+    if (msg.type === 'toggle_ready') {
       const room = rooms.get(c.roomId);
-      if (!room) return;
-      if (room.hostId !== c.id) return send(ws, { type: 'error', message: 'Only the host can start.' });
-      room.started = true;
-      room.worldSeed = Math.floor(Math.random() * 2147483647);
-      const payload = { type: 'match_started', room: roomPayload(room), worldSeed: room.worldSeed };
-      for (const p of room.players) send(p.ws, payload);
-      broadcastRoomList();
+      if (!room || room.started) return;
+      const player = room.players.find((p) => p.id === c.id);
+      if (!player) return;
+      player.ready = !player.ready;
+      broadcastRoomUpdate(room);
+      maybeStartCountdown(room);
       return;
     }
 
@@ -215,6 +264,6 @@ wss.on('connection', (ws) => {
   });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`DeadTown online co-op server listening on :${PORT}`);
 });
