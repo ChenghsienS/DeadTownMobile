@@ -2030,9 +2030,15 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       };
       ws.onerror = ()=>{ online.state='error'; renderOnlineLobby(); };
       ws.onclose = ()=>{
+        const wasOnlineMatch = state.running && !state.gameOver && onlineIsMode();
         const wasInMenu = !state.running || state.gameOver || state.overlayScreen==='online-lobby' || state.overlayScreen==='online-room';
         onlineResetState(true);
         online.connected=false; online.connecting=false; online.state='idle';
+        if(wasOnlineMatch){
+          alert(ot().onlineDisconnected);
+          goToMainMenu();
+          return;
+        }
         if(wasInMenu && !state.running) renderOnlineLobby();
       };
     }catch(err){
@@ -2077,6 +2083,23 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       resetGame();
       return;
     }
+    if(msg.type==='room_closed'){
+      online.roomId = null;
+      online.roomState = null;
+      online.peers = {};
+      online.started = false;
+      online.worldSeed = null;
+      online.countdownEndsAt = null;
+      online.gameMode = 'single';
+      alert(msg.message || 'The room was closed. Returning to the main menu.');
+      goToMainMenu();
+      return;
+    }
+    if(msg.type==='player_left'){
+      if(msg.playerId) delete online.peers[msg.playerId];
+      if(msg.message) alert(msg.message);
+      return;
+    }
     if(msg.type==='snapshot'){
       online.lastSnapshotAt = performance.now();
       const nextPeers = {};
@@ -2094,7 +2117,8 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
   }
 
   function createOnlineRoom(){
-    const name = (($('onlineRoomNameInput')?.value)||'').trim().slice(0,24) || `${state.playerName} ${ot().onlineRoomNameFallback}`;
+    const fallbackName = lang==='zh' ? `${state.playerName}的房间` : `${state.playerName}'s Room`;
+    const name = (($('onlineRoomNameInput')?.value)||'').trim().slice(0,24) || fallbackName;
     onlineSend({type:'create_room', roomName:name});
   }
   function joinOnlineRoom(id){ onlineSend({type:'join_room', roomId:id}); }
@@ -2157,11 +2181,9 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     const playersMarkup = (room.players||[]).map(p=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-top:1px solid rgba(255,255,255,0.08);"><span>${escapeHtml(p.name)} ${p.id===room.hostId?`<span class="accent">(${t.host})</span>`:''}</span><span style="opacity:0.72;">${room.started?t.inGame:(p.ready?t.readyStatus:t.unreadyStatus)}</span></div>`).join('');
     $('overlayCard').className='card';
     $('overlayCard').innerHTML = `
-      <h2>${t.currentRoom}</h2>
-      <p><span class="accent">${escapeHtml(room.roomName)}</span></p>
+      <div class="accent" style="font-size:32px;font-weight:bold;line-height:1.15;margin-bottom:12px;">${escapeHtml(room.roomName)}</div>
       <p style="opacity:0.75;">${t.onlineRoomOwner}: <span class="accent">${escapeHtml(room.hostName)}</span></p>
       <p style="opacity:0.75;">${t.onlinePlayersLabel}: ${room.players.length}/${room.maxPlayers}</p>
-      <p style="opacity:0.68;">${t.hostReadyHint}</p>
       ${room.countdownEndsAt?`<p class="accent" style="font-size:20px;letter-spacing:1px;">${t.autoStarting} ${countdownLeft}</p>`:''}
       <div style="text-align:left;margin:14px 0;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);">${playersMarkup}</div>
       <div class="controls" style="justify-content:center;flex-wrap:wrap;">
@@ -2199,7 +2221,9 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       btn.id='onlineCoopBtn';
       btn.textContent=t.onlineBtn;
       btn.onclick=()=>{ online.gameMode='single'; renderOnlineLobby(); };
-      target.appendChild(btn);
+      const startBtn = target.querySelector('#startBtn');
+      if(startBtn) startBtn.insertAdjacentElement('afterend', btn);
+      else target.appendChild(btn);
     }
   };
 
