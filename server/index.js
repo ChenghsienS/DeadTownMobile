@@ -1334,8 +1334,9 @@ function updateZombies(room, dt) {
         z.y = clamp(z.y, 10, WORLD.h - 10);
         collideWithBuildings(room.world, z);
         collideWithBuildings(room.world, player);
-        if (Math.hypot(player.x - prevPlayerX, player.y - prevPlayerY) > 0.08) {
-          player.zombiePushTime = Math.max(player.zombiePushTime || 0, 0.12);
+        const pushMoved = Math.hypot(player.x - prevPlayerX, player.y - prevPlayerY);
+        if (pushMoved > 0.55) {
+          player.zombiePushTime = Math.max(player.zombiePushTime || 0, 0.08);
         }
       }
     }

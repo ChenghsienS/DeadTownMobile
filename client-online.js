@@ -392,9 +392,17 @@
     const carriedByCharger = !!self.carryingByCharger;
     const serverZombiePush = (self.zombiePushTime||0) > 0.02;
     const inBurstMove = (player.dashTime||0) > 0 || (player.rocketJumpTime||0) > 0 || (player.knockbackTime||0) > 0;
-    if(!state.running || error > 96 || carriedByCharger || serverKnockback || serverZombiePush){
+    if(!state.running || error > 96 || carriedByCharger || serverKnockback){
       player.x = self.x;
       player.y = self.y;
+    }else if(serverZombiePush){
+      if(error > 64){
+        player.x = self.x;
+        player.y = self.y;
+      }else if(error > 4){
+        player.x += dx * 0.38;
+        player.y += dy * 0.38;
+      }
     }else if(!inBurstMove && error > 14){
       player.x += dx * 0.18;
       player.y += dy * 0.18;
