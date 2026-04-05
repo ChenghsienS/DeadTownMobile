@@ -92,6 +92,22 @@ function safeSend(ws, payload) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify(payload));
 }
+function addDamageText(room, x, y, value, color) {
+  if (!room || !room.match) return;
+  const rng = typeof room.rng === 'function' ? room.rng : Math.random;
+  room.match.damageTexts.push({
+    id: room.match.nextEntityId++,
+    x: x + randRange(rng, -6, 6),
+    y: y + randRange(rng, -4, 4),
+    amount: Math.max(1, Math.round(value)),
+    color,
+    life: 0.7,
+    maxLife: 0.7,
+    dx: randRange(rng, -10, 10),
+    vy: randRange(rng, -38, -28),
+  });
+  if (room.match.damageTexts.length > 160) room.match.damageTexts.splice(0, room.match.damageTexts.length - 160);
+}
 function makeRoads(world) {
   world.road = [];
   const majorV = [480, 1080, 1800, 2550, 3150];
@@ -276,7 +292,7 @@ function zombieBase(room, type) {
   if (type === 'bloater') return { radius: 18, speed: randRange(rng, 24, 34) + wave * 1.5, hp: 110 + wave * 12, maxHp: 110 + wave * 12, damage: 34 + wave * 0.9, score: 22, touchTimer: 0, touchCooldown: 0.7, touchDamageMul: 0.14, ...colors };
   if (type === 'crawler') return { radius: 10, speed: randRange(rng, 44, 68) + wave * 2.3, hp: 34 + wave * 3, maxHp: 34 + wave * 3, damage: 22 + wave * 0.6, score: 14, crawl: true, touchTimer: 0, touchCooldown: 0.42, touchDamageMul: 0.12, ...colors };
   if (type === 'pouncer') return { radius: 12, speed: randRange(rng, 58, 78) + wave * 2.8, hp: 38 + wave * 3, maxHp: 38 + wave * 3, damage: 30 + wave * 0.8, score: 20, pounceCd: randRange(rng, 1.5, 2.8), pounceTime: 0, vx: 0, vy: 0, touchTimer: 0, touchCooldown: 0.5, touchDamageMul: 0.13, ...colors };
-  if (type === 'charger') return { radius: 16, speed: 58 + wave * 2.1, hp: 160 + wave * 14, maxHp: 160 + wave * 14, damage: 36 + wave * 1.0, score: 36, touchTimer: 0, touchCooldown: 0.75, touchDamageMul: 0.10, state: 'approach', chargeTimer: 0, chargeWindup: 0.7, chargeDirX: 0, chargeDirY: 0, chargeSpeed: 470.4, chargeDuration: 0.96, chargeTravel: 0, carryingId: null, wallHit: false, ...colors };
+  if (type === 'charger') return { radius: 16, speed: 58 + wave * 2.1, hp: 160 + wave * 14, maxHp: 160 + wave * 14, damage: 36 + wave * 1.0, score: 36, touchTimer: 0, touchCooldown: 0.75, touchDamageMul: 0.10, state: 'approach', chargeTimer: 0, chargeWindup: 0.7, chargeDirX: 0, chargeDirY: 0, chargeSpeed: 470.4, chargeDuration: 0.96, chargeTravel: 0, carryTime: 0, carryingId: null, wallHit: false, ...colors };
   return { radius: 34, speed: 42 + wave * 1.2, hp: 2200 + wave * 180, maxHp: 2200 + wave * 180, damage: 52 + wave * 1.2, score: 500, boss: true, pounceCd: 2.5, pounceTime: 0, vx: 0, vy: 0, touchTimer: 0, touchCooldown: 0.6, touchDamageMul: 0.13, ...colors };
 }
 function createPlayerState(client) {
@@ -298,8 +314,15 @@ function createPlayerState(client) {
     wasReloading: false,
     dashCooldown: 0,
     dashTime: 0,
+    dashVX: 0,
+    dashVY: 0,
     rocketJumpTime: 0,
+    rocketJumpVX: 0,
+    rocketJumpVY: 0,
     knockbackTime: 0,
+    knockbackVX: 0,
+    knockbackVY: 0,
+    carryingByCharger: null,
     hurtTimer: 0,
     faceDir: 1,
     aimAngle: 0,
@@ -457,6 +480,7 @@ function createMatch(room) {
     projectiles: [],
     shotFx: [],
     flameFx: [],
+    damageTexts: [],
     bossAnnouncement: 0,
     airdropAnnouncement: 0,
     playersById: new Map(),
@@ -603,6 +627,18 @@ function awardSerum(player, buff) {
   player.buffAnnouncement = buff;
   player.buffAnnouncementTimer = 2.6;
 }
+function launchPlayerKnockback(player, dirX, dirY, speed, time) {
+  if (!player) return;
+  player.rocketJumpTime = 0;
+  player.rocketJumpVX = 0;
+  player.rocketJumpVY = 0;
+  player.knockbackTime = time;
+  player.knockbackVX = dirX * speed;
+  player.knockbackVY = dirY * speed;
+  player.carryingByCharger = null;
+  if (player.knockbackVX < 0) player.faceDir = -1;
+  else if (player.knockbackVX > 0) player.faceDir = 1;
+}
 function triggerBloaterDeathBurst(room, x, y, ownerId = null, deadId = null) {
   const radius = 74;
   pushEffect(room, { x, y, radius: 0, maxRadius: radius, life: 0.22, maxLife: 0.22, ring: 0, rocket: false, bloaterBurst: true, ownerId: ownerId || null });
@@ -621,6 +657,7 @@ function triggerBloaterDeathBurst(room, x, y, ownerId = null, deadId = null) {
     if (d < radius + other.radius) {
       const dealt = Math.max(6, 34 - d * 0.28);
       other.hp -= dealt;
+      addDamageText(room, other.x, other.y - other.radius - 10, dealt, '#b9ff7a');
       if (other.hp <= 0) handleZombieDeath(room, i, ownerId);
     }
   }
@@ -675,8 +712,18 @@ function updateReload(player, dt) {
 }
 function updatePlayerTransientStates(room, dt) {
   for (const player of currentPlayers(room)) {
+    player.dashTime = Math.max(0, (player.dashTime || 0) - dt);
     player.rocketJumpTime = Math.max(0, (player.rocketJumpTime || 0) - dt);
     player.knockbackTime = Math.max(0, (player.knockbackTime || 0) - dt);
+    if ((player.knockbackTime || 0) > 0) {
+      moveWithWallCollision(room.world, player, (player.knockbackVX || 0) * dt, (player.knockbackVY || 0) * dt);
+      const knockbackDamping = Math.pow(0.08, dt);
+      player.knockbackVX = (player.knockbackVX || 0) * knockbackDamping;
+      player.knockbackVY = (player.knockbackVY || 0) * knockbackDamping;
+    } else {
+      player.knockbackVX = 0;
+      player.knockbackVY = 0;
+    }
   }
 }
 function pushShotFx(room, fx) {
@@ -870,6 +917,7 @@ function processProjectiles(room, dt) {
             dealt *= Math.max(0.35, falloffMul);
           }
           z.hp -= dealt;
+          addDamageText(room, z.x, z.y - z.radius - 10, dealt, '#ffd84d');
           p.hitIds = p.hitIds || [];
           p.hitIds.push(z.id);
           if (z.hp <= 0) handleZombieDeath(room, j, p.ownerId || null);
@@ -917,7 +965,9 @@ function processProjectiles(room, dt) {
           const z = room.match.zombies[j];
           if (dist(z.x, z.y, p.x, p.y) < z.radius + p.size) {
             if (p.hitTick <= 0) {
-              z.hp -= p.damage * ((room.match.playersById.get(p.ownerId)?.damageMul) || 1);
+              const dealt = p.damage * ((room.match.playersById.get(p.ownerId)?.damageMul) || 1);
+              z.hp -= dealt;
+              addDamageText(room, z.x, z.y - z.radius - 10, dealt, '#ffd84d');
               p.hitTick = 0.06;
               if (z.hp <= 0) handleZombieDeath(room, j, p.ownerId || null);
             }
@@ -936,6 +986,15 @@ function processShotFx(room, dt) {
   for (let i = room.match.flameFx.length - 1; i >= 0; i -= 1) {
     room.match.flameFx[i].life -= dt;
     if (room.match.flameFx[i].life <= 0) room.match.flameFx.splice(i, 1);
+  }
+}
+function processDamageTexts(room, dt) {
+  for (let i = room.match.damageTexts.length - 1; i >= 0; i -= 1) {
+    const t = room.match.damageTexts[i];
+    t.y += t.vy * dt;
+    t.x += (t.dx || 0) * dt;
+    t.life -= dt;
+    if (t.life <= 0) room.match.damageTexts.splice(i, 1);
   }
 }
 function applyExplosion(room, sourcePlayer, x, y, kind = 'normal') {
@@ -970,6 +1029,7 @@ function applyExplosion(room, sourcePlayer, x, y, kind = 'normal') {
       const base = rocket ? (z.type === 'boss' ? 300 : 180) : 90;
       const dealt = Math.max(8, base - d * (rocket ? 0.9 : 0.65)) * (sourcePlayer?.damageMul || 1);
       z.hp -= dealt;
+      addDamageText(room, z.x, z.y - z.radius - 10, dealt, '#ffd84d');
       if (z.hp <= 0) handleZombieDeath(room, i, sourcePlayer?.id || null);
     }
   }
@@ -1027,6 +1087,7 @@ function updateCharger(room, z, dt) {
       z.chargeTimer = z.chargeDuration;
       z.chargeTravel = 0;
       z.carryingId = null;
+      z.carryTime = 0;
       z.wallHit = false;
     }
     return;
@@ -1040,8 +1101,10 @@ function updateCharger(room, z, dt) {
     const moved = Math.hypot(z.x - prevX, z.y - prevY);
     z.chargeTravel += moved;
     z.chargeTimer -= dt;
-    if (!z.carryingId && target.alive && dist(z.x, z.y, target.x, target.y) < z.radius + target.radius + 3) {
+    if (!z.carryingId && target.alive && (target.dashTime || 0) <= 0 && (target.rocketJumpTime || 0) <= 0 && dist(z.x, z.y, target.x, target.y) < z.radius + target.radius + 3) {
       z.carryingId = target.id;
+      z.carryTime = 0.32;
+      target.carryingByCharger = z.id;
       damagePlayerServer(room, target, z.damage * 0.09);
     }
     if (z.carryingId) {
@@ -1049,13 +1112,15 @@ function updateCharger(room, z, dt) {
       if (carried && carried.alive) {
         const carryX = z.x + z.chargeDirX * (z.radius + carried.radius - 1);
         const carryY = z.y + z.chargeDirY * (z.radius + carried.radius - 1);
-        const temp = { ...carried, x: carryX, y: carryY };
-        collideWithBuildings(room.world, temp);
-        if (Math.hypot(temp.x - carryX, temp.y - carryY) > 1.5) z.wallHit = true;
-        carried.x = temp.x;
-        carried.y = temp.y;
+        carried.x = carryX;
+        carried.y = carryY;
+        collideWithBuildings(room.world, carried);
+        if (Math.hypot(carried.x - carryX, carried.y - carryY) > 1.5) {
+          z.wallHit = true;
+        }
         if (z.wallHit) {
           damagePlayerServer(room, carried, z.damage * 0.31);
+          launchPlayerKnockback(carried, z.chargeDirX, z.chargeDirY, 360, 0.32);
           z.carryingId = null;
           z.state = 'recover';
           z.chargeTimer = 0.55;
@@ -1065,7 +1130,13 @@ function updateCharger(room, z, dt) {
       }
     }
     if (z.chargeTimer <= 0 || z.chargeTravel >= 450) {
-      z.carryingId = null;
+      if (z.carryingId) {
+        const carried = room.match.playersById.get(z.carryingId);
+        if (carried && carried.alive) {
+          launchPlayerKnockback(carried, z.chargeDirX, z.chargeDirY, 420, 0.42);
+        }
+        z.carryingId = null;
+      }
       z.state = 'recover';
       z.chargeTimer = 0.8;
     }
@@ -1131,6 +1202,20 @@ function updateZombies(room, dt) {
       }
     }
   }
+  for (const player of livingPlayers(room)) {
+    if ((player.rocketJumpTime || 0) <= 0) {
+      for (let i = 0; i < match.zombies.length; i += 1) {
+        const z = match.zombies[i];
+        softSeparate(player, z, z.type === 'boss' ? 0.22 : 0.18);
+        player.x = clamp(player.x, player.radius + 2, WORLD.w - (player.radius + 2));
+        player.y = clamp(player.y, player.radius + 2, WORLD.h - (player.radius + 2));
+        z.x = clamp(z.x, 10, WORLD.w - 10);
+        z.y = clamp(z.y, 10, WORLD.h - 10);
+        collideWithBuildings(room.world, z);
+        collideWithBuildings(room.world, player);
+      }
+    }
+  }
   for (let i = 0; i < match.zombies.length; i += 1) {
     for (let j = i + 1; j < match.zombies.length; j += 1) {
       softSeparate(match.zombies[i], match.zombies[j], 0.12);
@@ -1149,7 +1234,9 @@ function processFireZones(room, dt) {
       for (let j = room.match.zombies.length - 1; j >= 0; j -= 1) {
         const z = room.match.zombies[j];
         if (dist(zone.x, zone.y, z.x, z.y) < zone.radius + z.radius) {
-          z.hp -= 18 * ((room.match.playersById.get(zone.ownerId)?.damageMul) || 1);
+          const dealt = 18 * ((room.match.playersById.get(zone.ownerId)?.damageMul) || 1);
+          z.hp -= dealt;
+          addDamageText(room, z.x, z.y - z.radius - 10, dealt, '#ffd84d');
           if (z.hp <= 0) handleZombieDeath(room, j, zone.ownerId || null);
         }
       }
@@ -1253,7 +1340,9 @@ function rayDamage(room, sourcePlayer, angle, range, pelletDamage, maxHits = 1, 
   for (const hit of candidates) {
     const z = room.match.zombies[hit.index];
     if (!z) continue;
-    z.hp -= pelletDamage * (sourcePlayer.damageMul || 1);
+    const dealt = pelletDamage * (sourcePlayer.damageMul || 1);
+    z.hp -= dealt;
+    addDamageText(room, z.x, z.y - z.radius - 10, dealt, '#ffd84d');
     if (hitIds) hitIds.add(z.id);
     if (z.hp <= 0) handleZombieDeath(room, hit.index, sourcePlayer.id);
     hits += 1;
@@ -1357,7 +1446,8 @@ function updatePlayerFromClient(client, state) {
   const player = room.match.playersById.get(client.id);
   if (!player || !player.alive) return;
   if (typeof state.name === 'string' && state.name.trim()) client.name = state.name.trim().slice(0, 18);
-  if (Number.isFinite(state.x) && Number.isFinite(state.y)) {
+  if (Number.isFinite(state.dashTime)) player.dashTime = Math.max(player.dashTime || 0, Number(state.dashTime) || 0);
+  if (!(player.carryingByCharger || (player.knockbackTime || 0) > 0) && Number.isFinite(state.x) && Number.isFinite(state.y)) {
     player.x = clamp(Number(state.x), player.radius + 2, WORLD.w - (player.radius + 2));
     player.y = clamp(Number(state.y), player.radius + 2, WORLD.h - (player.radius + 2));
     collideWithBuildings(room.world, player);
@@ -1393,6 +1483,10 @@ function snapshotForClient(room, client) {
     rocketJumpTime: p.rocketJumpTime || 0,
     rocketJumpVX: p.rocketJumpVX || 0,
     rocketJumpVY: p.rocketJumpVY || 0,
+    knockbackTime: p.knockbackTime || 0,
+    knockbackVX: p.knockbackVX || 0,
+    knockbackVY: p.knockbackVY || 0,
+    carryingByCharger: p.carryingByCharger || null,
     alive: p.alive,
     buffAnnouncement: p.id === client.id ? p.buffAnnouncement : '',
     buffAnnouncementTimer: p.id === client.id ? p.buffAnnouncementTimer : 0,
@@ -1429,6 +1523,7 @@ function snapshotForClient(room, client) {
       projectiles: room.match.projectiles.map((p) => ({ ...p })),
       shotFx: room.match.shotFx.map((fx) => ({ ...fx })),
       flameFx: room.match.flameFx.map((fx) => ({ ...fx })),
+      damageTexts: room.match.damageTexts.map((t) => ({ ...t })),
     },
   };
 }
@@ -1473,6 +1568,7 @@ function updateRoom(room, dt) {
   processAirdropsAndPickups(room, dt);
   processEffects(room, dt);
   processShotFx(room, dt);
+  processDamageTexts(room, dt);
   if (!livingPlayers(room).length) endMatch(room, 'All players were defeated.');
 }
 

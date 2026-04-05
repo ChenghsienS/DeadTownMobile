@@ -300,8 +300,10 @@
     const dx = self.x - player.x;
     const dy = self.y - player.y;
     const error = Math.hypot(dx, dy);
+    const serverKnockback = (self.knockbackTime||0) > 0.02;
+    const carriedByCharger = !!self.carryingByCharger;
     const inBurstMove = (player.dashTime||0) > 0 || (player.rocketJumpTime||0) > 0 || (player.knockbackTime||0) > 0;
-    if(!state.running || error > 96){
+    if(!state.running || error > 96 || carriedByCharger || serverKnockback){
       player.x = self.x;
       player.y = self.y;
     }else if(!inBurstMove && error > 14){
@@ -334,6 +336,18 @@
       if(player.rocketJumpVX < 0) player.faceDir = -1; else if(player.rocketJumpVX > 0) player.faceDir = 1;
       state.cameraShake = Math.max(state.cameraShake, 8);
       state.screenFlash = Math.max(state.screenFlash, 0.26);
+    }
+    if((self.knockbackTime||0) > 0.02){
+      player.knockbackTime = self.knockbackTime || 0;
+      player.knockbackVX = self.knockbackVX || 0;
+      player.knockbackVY = self.knockbackVY || 0;
+      player.rocketJumpTime = 0;
+      player.rocketJumpVX = 0;
+      player.rocketJumpVY = 0;
+      player.dashTime = 0;
+      player.dashVX = 0;
+      player.dashVY = 0;
+      if(player.knockbackVX < 0) player.faceDir = -1; else if(player.knockbackVX > 0) player.faceDir = 1;
     }
     if(prevHp > self.hp){
       addDamageText(player.x+rand(-8,8), player.y-player.radius-10, prevHp-self.hp, '#ff6767');
@@ -478,6 +492,7 @@
       : [];
     online.syncedShotFx = Array.isArray(match.shotFx) ? match.shotFx.map(fx=>Object.assign({}, fx)) : [];
     online.syncedFlameFx = Array.isArray(match.flameFx) ? match.flameFx.map(fx=>Object.assign({}, fx)) : [];
+    state.damageTexts = Array.isArray(match.damageTexts) ? match.damageTexts.map(t=>Object.assign({}, t)) : [];
     updateHUD();
   }
 
