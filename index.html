@@ -32,6 +32,14 @@
     .hidden { display:none; }
     .tip { position:fixed; bottom:10px; left:50%; transform:translateX(-50%); background:rgba(12,10,10,0.88); border:2px solid rgba(255,255,255,0.1); padding:8px 12px; font-size:12px; z-index:10; pointer-events:none; }
     body.ingame .tip { display:none !important; }
+    .eventFeed { position:fixed; left:12px; top:50%; transform:translateY(-50%); width:min(360px,42vw); display:flex; flex-direction:column; gap:8px; z-index:41; pointer-events:none; }
+    .eventToast { background:rgba(12,10,10,0.92); border:2px solid rgba(255,255,255,0.10); box-shadow:0 0 0 2px rgba(0,0,0,0.30) inset; color:#f0e6d8; padding:10px 12px; font-size:13px; line-height:1.45; opacity:0; transform:translateX(-16px); transition:opacity .18s ease, transform .18s ease; }
+    .eventToast.show { opacity:1; transform:translateX(0); }
+    .eventToast.info { border-color:rgba(255,255,255,0.12); }
+    .eventToast.warn { border-color:rgba(255,178,122,0.40); }
+    .eventToast.error { border-color:rgba(235,110,110,0.42); }
+    body.mobile-mode .eventFeed { left:8px; top:50%; transform:translateY(-50%); width:min(72vw,320px); }
+    body.mobile-mode .eventToast { font-size:12px; padding:9px 10px; }
     .controls { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:8px; }
     button { background:#221b18; color:#f0e6d8; border:2px solid rgba(255,255,255,0.15); padding:8px 12px; font:inherit; cursor:pointer; }
     button:hover { background:#30231d; }
@@ -231,6 +239,7 @@
 </div>
 
 <div class="tip hidden" id="tip"></div>
+<div class="eventFeed" id="eventFeed"></div>
 <div id="devPanel" class="panel hidden" style="position:fixed;right:14px;top:86px;z-index:25;pointer-events:auto;min-width:180px;">
   <div style="font-size:12px;opacity:0.72;margin-bottom:8px;">DEV PANEL</div>
   <div class="controls" style="justify-content:flex-start;flex-wrap:wrap;">
@@ -574,6 +583,21 @@ const T={
 };
 let lang='en';
 const $=id=>document.getElementById(id);
+function pushOnlineNotice(message, kind='info', duration=null){
+  const feed = $('eventFeed');
+  if(!feed || !message) return;
+  const item = document.createElement('div');
+  item.className = `eventToast ${kind}`;
+  item.textContent = String(message);
+  feed.appendChild(item);
+  while(feed.children.length>4) feed.removeChild(feed.firstChild);
+  requestAnimationFrame(()=>item.classList.add('show'));
+  const ttl = duration ?? (kind==='error' ? 4200 : kind==='warn' ? 3800 : 3200);
+  setTimeout(()=>{
+    item.classList.remove('show');
+    setTimeout(()=>{ if(item.parentNode) item.parentNode.removeChild(item); }, 220);
+  }, ttl);
+}
 function isDefaultPlayerName(name){
   return String(name||'').trim().toLowerCase()==='player';
 }
@@ -1946,6 +1970,9 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     lastSnapshotAt: 0,
   };
   window.deadtownOnline = online;
+  online.authZombies = [];
+  online.authWave = 1;
+  online.selfState = null;
 
   function ot(){ return ONLINE_T[lang] || ONLINE_T.en; }
   function onlineStatusText(){
@@ -1988,6 +2015,9 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     online.worldSeed = null;
     online.sendTimer = 0;
     online.lastSnapshotAt = 0;
+    online.authZombies = [];
+    online.authWave = 1;
+    online.selfState = null;
     if(!keepConnection){ online.connected=false; online.connecting=false; online.clientId=null; online.state='idle'; }
   }
 
@@ -2000,7 +2030,7 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     online.connected=false;
     online.connecting=false;
     online.state='idle';
-    if(!silent) alert(ot().onlineDisconnected);
+    if(!silent) pushOnlineNotice(ot().onlineDisconnected, 'warn');
   }
 
   function onlineSend(data){
@@ -2010,8 +2040,8 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
 
   function onlineConnect(){
     if(online.connected || online.connecting) return;
-    if(!state.playerName){ alert(ot().onlineNeedName); return; }
-    if(!online.serverUrl){ alert(ot().onlineNeedServer); return; }
+    if(!state.playerName){ pushOnlineNotice(ot().onlineNeedName, 'warn'); return; }
+    if(!online.serverUrl){ pushOnlineNotice(ot().onlineNeedServer, 'warn'); return; }
     online.connecting=true; online.state='connecting';
     renderOnlineLobby();
     try{
@@ -2035,7 +2065,7 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
         onlineResetState(true);
         online.connected=false; online.connecting=false; online.state='idle';
         if(wasOnlineMatch){
-          alert(ot().onlineDisconnected);
+          pushOnlineNotice(ot().onlineDisconnected, 'error');
           goToMainMenu();
           return;
         }
@@ -2091,27 +2121,45 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       online.worldSeed = null;
       online.countdownEndsAt = null;
       online.gameMode = 'single';
-      alert(msg.message || 'The room was closed. Returning to the main menu.');
+      const rawMessage = String(msg.message || '');
+      const hostNameMatch = rawMessage.match(/^(.*?)\s(?:disconnected\.|closed the room\.)/i);
+      const hostName = hostNameMatch && hostNameMatch[1] ? hostNameMatch[1].trim() : '';
+      const closeText = hostName
+        ? (lang==='zh' ? `[房主] ${hostName} 已退出房间，房间已被关闭。` : `[Host] ${hostName} left the room. The room has been closed.`)
+        : (lang==='zh' ? '[房主] 已退出房间，房间已被关闭。' : '[Host] left the room. The room has been closed.');
+      pushOnlineNotice(closeText, 'warn', 4600);
       goToMainMenu();
       return;
     }
     if(msg.type==='player_left'){
       if(msg.playerId) delete online.peers[msg.playerId];
-      if(msg.message) alert(msg.message);
+      const playerLabel = msg.name || (lang==='zh' ? '玩家' : 'A player');
+      const leaveText = online.started
+        ? (lang==='zh' ? `${playerLabel} 已退出对局。` : `${playerLabel} left the match.`)
+        : (lang==='zh' ? `${playerLabel} 已退出房间。` : `${playerLabel} left the room.`);
+      pushOnlineNotice(leaveText, 'info');
       return;
     }
     if(msg.type==='snapshot'){
       online.lastSnapshotAt = performance.now();
       const nextPeers = {};
+      let selfState = null;
       for(const p of (msg.players||[])){
-        if(!p || p.id===online.clientId) continue;
+        if(!p) continue;
+        if(p.id===online.clientId){
+          selfState = Object.assign({}, p);
+          continue;
+        }
         nextPeers[p.id] = Object.assign({}, p, {lastSeen: performance.now()});
       }
       online.peers = nextPeers;
+      online.selfState = selfState;
+      online.authZombies = Array.isArray(msg.zombies) ? msg.zombies.map(z=>Object.assign({}, z)) : [];
+      if(Number.isFinite(msg.wave)) online.authWave = msg.wave;
       return;
     }
     if(msg.type==='error'){
-      alert(msg.message || 'Server error');
+      pushOnlineNotice(msg.message || 'Server error', 'error');
       return;
     }
   }
@@ -2238,6 +2286,9 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     online.started=false;
     online.worldSeed=null;
     online.peers={};
+    online.authZombies=[];
+    online.authWave=1;
+    online.selfState=null;
     online.gameMode='single';
     return __origGoToMainMenu();
   };
@@ -2257,23 +2308,137 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     return ret;
   };
 
+  const __origSpawnZombie = spawnZombie;
+  spawnZombie = function(){ if(onlineIsMode()) return; return __origSpawnZombie(); };
+  const __origSpawnBoss = spawnBoss;
+  spawnBoss = function(){ if(onlineIsMode()) return; return __origSpawnBoss(); };
+  const __origSpawnAirdrop = spawnAirdrop;
+  spawnAirdrop = function(){ if(onlineIsMode()) return; return __origSpawnAirdrop(); };
+
+  function onlineCloneZombies(){
+    return (online.authZombies||[]).map(z=>Object.assign({}, z));
+  }
+  function onlineApplyAuthoritativeState(){
+    if(Number.isFinite(online.authWave)) state.wave = online.authWave;
+    state.zombies = onlineCloneZombies();
+    state.pickups = [];
+    state.airdrops = [];
+    state.bossSpawned = state.zombies.some(z=>z.type==='boss');
+    if(online.selfState){
+      player.maxHp = Math.max(1, Number(online.selfState.maxHp ?? player.maxHp));
+      player.hp = Math.max(0, Number(online.selfState.hp ?? player.hp));
+      state.score = Number(online.selfState.score ?? state.score);
+      state.kills = Number(online.selfState.kills ?? state.kills);
+      if(player.hp<=0 && !state.gameOver){
+        endGame();
+      }
+    }
+  }
+  function onlineSendHitReport(zombieId, damage, weapon){
+    if(!zombieId || !Number.isFinite(damage) || damage<=0) return;
+    let cap = 42;
+    if(weapon==='gatling') cap = 28;
+    else if(weapon==='flamethrower') cap = 12;
+    else if(weapon==='rocket') cap = 240;
+    else if(weapon==='grenade') cap = 190;
+    onlineSend({ type:'hit_report', zombieId, damage: clamp(damage, 1, cap), weapon });
+  }
+  function onlineProcessProjectileHits(){
+    const zombies = online.authZombies || [];
+    if(!zombies.length) return;
+    for(let i=state.pellets.length-1;i>=0;i--){
+      const p = state.pellets[i];
+      if(!p) continue;
+      for(const z of zombies){
+        if((!p.hitIds || !p.hitIds.includes(z.id)) && dist(z.x,z.y,p.x,p.y)<(z.radius||12)+(p.radius||2)+1){
+          const weapon = p.penetration!=null ? 'gatling' : 'shotgun';
+          onlineSendHitReport(z.id, Number(p.damage)||1, weapon);
+          addDamageText(z.x+rand(-12,12),z.y-(z.radius||12)-10,Number(p.damage)||1,'#ffd84d');
+          blood(p.x,p.y,4,'rgba(120,20,20,0.9)',0.45);
+          playHit();
+          p.hitIds = p.hitIds || [];
+          p.hitIds.push(z.id);
+          if(p.penetration!=null){
+            p.penetration--;
+            if(p.penetration<=0) state.pellets.splice(i,1);
+          }else{
+            state.pellets.splice(i,1);
+          }
+          break;
+        }
+      }
+    }
+    for(let i=state.flameParticles.length-1;i>=0;i--){
+      const f = state.flameParticles[i];
+      if(!f || (f.hitTick||0)>0) continue;
+      for(const z of zombies){
+        if(dist(z.x,z.y,f.x,f.y)<(z.radius||12)+(f.size||4)){
+          onlineSendHitReport(z.id, Number(f.damage)||1, 'flamethrower');
+          f.hitTick = 0.08;
+          break;
+        }
+      }
+    }
+  }
+
+  function onlineVisualExplode(g, kind='normal'){
+    const rocket=kind==='rocket';
+    const molotov=kind==='molotov';
+    if(molotov){
+      state.explosions.push({x:g.x,y:g.y,radius:0,maxRadius:84,life:0.34,maxLife:0.34,ring:0,rocket:false,molotov:true});
+      for(let k=0;k<28;k++){
+        const a=Math.random()*Math.PI*2,s=rand(40,220),life=rand(0.35,0.9);
+        state.particles.push({x:g.x,y:g.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-rand(20,80),life,maxLife:life,size:rand(3,8),color:Math.random()>0.45?'rgba(255,210,70,0.95)':'rgba(255,120,30,0.85)',drag:0.93});
+      }
+      state.cameraShake=Math.max(state.cameraShake,5);
+      state.screenFlash=Math.max(state.screenFlash,0.18);
+      playBoom();
+      return;
+    }
+    state.explosions.push({x:g.x,y:g.y,radius:0,maxRadius:rocket?150:128,life:rocket?0.56:0.42,maxLife:rocket?0.56:0.42,ring:0,rocket});
+    for(let k=0;k<(rocket?42:26);k++){
+      const a=Math.random()*Math.PI*2,s=rand(70,rocket?340:260);
+      state.particles.push({x:g.x,y:g.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rocket?rand(0.35,0.6):0.35,maxLife:rocket?0.6:0.35,size:rand(2,rocket?6:5),color:Math.random()>0.45?'rgba(255,150,60,0.95)':'rgba(80,80,80,0.65)'});
+    }
+    state.cameraShake=Math.max(state.cameraShake,rocket?9:14);
+    state.screenFlash=Math.max(state.screenFlash,rocket?0.34:0.28);
+    playBoom();
+    blood(g.x,g.y,20,'rgba(180,60,24,0.95)',1.2);
+  }
+
+  const __origExplode = explode;
+  explode = function(g, kind='normal'){
+    if(!onlineIsMode()) return __origExplode(g, kind);
+    onlineSend({ type:'explosion_report', x:Number(g.x)||0, y:Number(g.y)||0, kind });
+    return onlineVisualExplode(g, kind);
+  };
+
   const __origUpdate = update;
   update = function(dt){
+    if(!(online.connected && online.started && state.running && !state.gameOver)){
+      __origUpdate(dt);
+      return;
+    }
+    state.zombies = [];
+    state.pickups = [];
+    state.airdrops = [];
     __origUpdate(dt);
-    if(!(online.connected && online.started && state.running && !state.gameOver)) return;
+    onlineProcessProjectileHits();
+    onlineApplyAuthoritativeState();
     online.sendTimer -= dt;
     if(online.sendTimer<=0){
       online.sendTimer = 0.05;
       onlineSend({
         type:'player_state',
         state:{
-          x:player.x, y:player.y, hp:player.hp, maxHp:player.maxHp,
-          faceDir:player.faceDir, weapon:player.weapon, score:state.score, kills:state.kills,
+          x:player.x, y:player.y,
+          faceDir:player.faceDir, weapon:player.weapon,
           moving: !!(mouseDown || touchState.shootHeld),
           name: state.playerName,
         }
       });
     }
+    updateHUD();
   };
 
   function drawRemotePlayer(peer, cam){
@@ -2308,11 +2473,12 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     ctx.textAlign='left';
     ctx.font='bold 12px Courier New';
     ctx.fillStyle='rgba(0,0,0,0.55)';
-    ctx.fillRect(12, SH-64, 210, 48);
+    ctx.fillRect(12, SH-78, 250, 62);
     ctx.fillStyle='#9cc2ff';
-    ctx.fillText(`${ot().onlinePreview}`, 20, SH-42);
+    ctx.fillText(`${ot().onlinePreview}`, 20, SH-54);
     ctx.fillStyle='#f0e6d8';
-    ctx.fillText(`${ot().peers}: ${Object.keys(online.peers).length}`, 20, SH-24);
+    ctx.fillText(`${ot().peers}: ${Object.keys(online.peers).length}`, 20, SH-36);
+    ctx.fillText(`${T[lang].wave}: ${online.authWave||state.wave} · Zombies: ${(online.authZombies||[]).length}`, 20, SH-18);
   };
 })();
 </script>
