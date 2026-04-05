@@ -2481,7 +2481,6 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       online.seenEffectIds.add(fx.id);
       if(fx.kind==='molotov') onlineVisualExplode({x:fx.x,y:fx.y}, 'molotov');
       else if(fx.kind==='rocket') onlineVisualExplode({x:fx.x,y:fx.y}, 'rocket');
-      else if(fx.kind==='bloater') onlineVisualExplode({x:fx.x,y:fx.y}, 'bloater');
       else onlineVisualExplode({x:fx.x,y:fx.y}, 'normal');
     }
   }
@@ -2567,7 +2566,6 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
   function onlineVisualExplode(g, kind='normal'){
     const rocket=kind==='rocket';
     const molotov=kind==='molotov';
-    const bloater=kind==='bloater';
     if(molotov){
       state.explosions.push({x:g.x,y:g.y,radius:0,maxRadius:84,life:0.34,maxLife:0.34,ring:0,rocket:false,molotov:true});
       for(let k=0;k<28;k++){
@@ -2579,16 +2577,15 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       playBoom();
       return;
     }
-    state.explosions.push({x:g.x,y:g.y,radius:0,maxRadius:bloater?74:(rocket?150:128),life:bloater?0.28:(rocket?0.56:0.42),maxLife:bloater?0.28:(rocket?0.56:0.42),ring:0,rocket,bloater});
-    for(let k=0;k<(bloater?20:(rocket?42:26));k++){
-      const a=Math.random()*Math.PI*2,s=rand(70,bloater?190:(rocket?340:260));
-      const color = bloater ? (Math.random()>0.45?'rgba(140,210,90,0.85)':'rgba(110,160,70,0.62)') : (Math.random()>0.45?'rgba(255,150,60,0.95)':'rgba(80,80,80,0.65)');
-      state.particles.push({x:g.x,y:g.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:bloater?rand(0.22,0.42):(rocket?rand(0.35,0.6):0.35),maxLife:bloater?0.42:(rocket?0.6:0.35),size:rand(2,bloater?5:(rocket?6:5)),color});
+    state.explosions.push({x:g.x,y:g.y,radius:0,maxRadius:rocket?150:128,life:rocket?0.56:0.42,maxLife:rocket?0.56:0.42,ring:0,rocket});
+    for(let k=0;k<(rocket?42:26);k++){
+      const a=Math.random()*Math.PI*2,s=rand(70,rocket?340:260);
+      state.particles.push({x:g.x,y:g.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rocket?rand(0.35,0.6):0.35,maxLife:rocket?0.6:0.35,size:rand(2,rocket?6:5),color:Math.random()>0.45?'rgba(255,150,60,0.95)':'rgba(80,80,80,0.65)'});
     }
-    state.cameraShake=Math.max(state.cameraShake,bloater?5:(rocket?9:14));
-    state.screenFlash=Math.max(state.screenFlash,bloater?0.16:(rocket?0.34:0.28));
+    state.cameraShake=Math.max(state.cameraShake,rocket?9:14);
+    state.screenFlash=Math.max(state.screenFlash,rocket?0.34:0.28);
     playBoom();
-    blood(g.x,g.y,bloater?12:20,bloater?'rgba(120,150,60,0.9)':'rgba(180,60,24,0.95)',bloater?0.8:1.2);
+    blood(g.x,g.y,20,'rgba(180,60,24,0.95)',1.2);
   }
 
   const __origExplode = explode;
@@ -2632,15 +2629,12 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
         state:{
           x:player.x, y:player.y,
           faceDir:player.faceDir, weapon:player.weapon,
-          aimAngle: Math.atan2((camera().y+state.mouse.y)-player.y,(camera().x+state.mouse.x)-player.x) || 0,
           mag: player.mag, magSize: player.magSize,
           gatlingAmmo: player.gatlingAmmo, rocketAmmo: player.rocketAmmo, flameAmmo: player.flameAmmo,
           grenades: player.grenades, molotovs: player.molotovs,
           damageMul: player.damageMul, speedMul: player.speedMul,
           maxHp: player.maxHp,
-          moving: !!(mouseDown || touchState.shootHeld || Math.abs(player.dashVX)>1 || Math.abs(player.dashVY)>1 || touchState.move.active),
-          dashTime: player.dashTime,
-          hurtTimer: player.hurtTimer,
+          moving: !!(mouseDown || touchState.shootHeld),
           name: state.playerName,
         }
       });
@@ -2651,20 +2645,15 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
   function drawRemotePlayer(peer, cam){
     const s = worldToScreen(peer.x||0, peer.y||0, cam), x=Math.round(s.x), y=Math.round(s.y);
     const facing = (peer.faceDir||1) < 0 ? -1 : 1;
-    const hurt = Number(peer.hurtTimer||0) > 0.02;
-    const moving = !!peer.moving;
-    const step = moving ? Math.sin(performance.now()*0.018) * 2 : 0;
-    const skin = hurt ? '#d8a29a' : '#bca18f';
-    const shirt = hurt ? '#8f4141' : '#2c5d8f';
     const body = '#6ca9ff';
-    const aim = Number.isFinite(peer.aimAngle) ? peer.aimAngle : (facing>0?0:Math.PI);
-    pxRect(x-6,y-8,12,10,skin);
+    const shirt = '#2c5d8f';
+    pxRect(x-6,y-8,12,10,'#bca18f');
     pxRect(x-7,y+2,14,10,shirt);
-    pxRect(x-7,y+12+step,4,6,'#242424');
-    pxRect(x+3,y+12-step,4,6,'#242424');
+    pxRect(x-7,y+12,4,6,'#242424');
+    pxRect(x+3,y+12,4,6,'#242424');
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.fillRect(x-10,y+18,20,4);
-    drawRotatedGun(x+(facing>0?5:-5), y+5, aim, body, '#d6b07a', peer.weapon||'shotgun');
+    drawRotatedGun(x+(facing>0?5:-5), y+5, facing>0?0:Math.PI, body, '#d6b07a', peer.weapon||'shotgun');
     ctx.font='12px Courier New';
     ctx.textAlign='center';
     ctx.fillStyle='rgba(0,0,0,0.65)';
