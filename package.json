@@ -1,10 +1,11 @@
 {
-  "name": "deadtown-online-coop-server",
-  "version": "0.1.0",
+  "name": "deadtown-online-authoritative-core",
+  "version": "1.0.0",
   "private": true,
-  "main": "deadtown_online_server.js",
+  "description": "DeadTown online authoritative combat core phase 1",
+  "main": "deadtown_online_server_authoritative_core_phase1.js",
   "scripts": {
-    "start": "node deadtown_online_server.js"
+    "start": "node deadtown_online_server_authoritative_core_phase1.js"
   },
   "dependencies": {
     "ws": "^8.18.0"
