@@ -318,6 +318,20 @@
     player.flameAmmo = self.flameAmmo ?? player.flameAmmo;
     player.speedMul = self.speedMul ?? player.speedMul;
     player.damageMul = self.damageMul ?? player.damageMul;
+    if((self.rocketJumpTime||0) > 0.02 && (player.rocketJumpTime||0) <= 0.02){
+      player.rocketJumpTime = self.rocketJumpTime || 0;
+      player.rocketJumpVX = self.rocketJumpVX || 0;
+      player.rocketJumpVY = self.rocketJumpVY || 0;
+      player.dashTime = 0;
+      player.dashVX = 0;
+      player.dashVY = 0;
+      player.knockbackTime = 0;
+      player.knockbackVX = 0;
+      player.knockbackVY = 0;
+      if(player.rocketJumpVX < 0) player.faceDir = -1; else if(player.rocketJumpVX > 0) player.faceDir = 1;
+      state.cameraShake = Math.max(state.cameraShake, 8);
+      state.screenFlash = Math.max(state.screenFlash, 0.26);
+    }
     if(prevHp > self.hp){
       addDamageText(player.x+rand(-8,8), player.y-player.radius-10, prevHp-self.hp, '#ff6767');
       state.cameraShake = Math.max(state.cameraShake, 1.8);
@@ -365,8 +379,8 @@
     state.fireZones = Array.isArray(match.fireZones) ? match.fireZones.map(z=>Object.assign({}, z)) : [];
     state.explosions = Array.isArray(match.effects) ? match.effects.map(e=>Object.assign({}, e)) : [];
     online.syncedProjectiles = Array.isArray(match.projectiles) ? match.projectiles.map(p=>Object.assign({}, p)) : [];
-    online.syncedShotFx = Array.isArray(match.shotFx) ? match.shotFx.map(fx=>Object.assign({}, fx)) : [];
-    online.syncedFlameFx = Array.isArray(match.flameFx) ? match.flameFx.map(fx=>Object.assign({}, fx)) : [];
+    online.syncedShotFx = [];
+    online.syncedFlameFx = [];
     updateHUD();
   }
 
@@ -840,16 +854,37 @@
 
   function drawOnlineProjectile(projectile, cam){
     if(!projectile || projectile.ownerId === online.clientId) return;
+    if(projectile.kind === 'pellet'){
+      const x = projectile.x ?? 0;
+      const y = projectile.y ?? 0;
+      if(x<cam.x||y<cam.y||x>cam.x+SW||y>cam.y+SH) return;
+      const s = worldToScreen(x, y, cam);
+      ctx.fillStyle = '#ffd69c';
+      ctx.fillRect(px(s.x), px(s.y), 2, 2);
+      return;
+    }
+    if(projectile.kind === 'flame'){
+      const x = projectile.x ?? 0;
+      const y = projectile.y ?? 0;
+      if(x<cam.x||y<cam.y||x>cam.x+SW||y>cam.y+SH) return;
+      const s = worldToScreen(x, y, cam);
+      const size = projectile.size ?? 4;
+      const maxLife = Math.max(0.0001, projectile.maxLife || projectile.life || 0.2);
+      ctx.fillStyle = projectile.color || 'rgba(255,130,35,0.74)';
+      ctx.globalAlpha = Math.max(0, Math.min(1, (projectile.life||0) / maxLife));
+      ctx.fillRect(px(s.x-size*0.5), px(s.y-size*0.5), Math.max(1, px(size)), Math.max(1, px(size)));
+      ctx.globalAlpha = 1;
+      return;
+    }
     if(projectile.kind === 'rocket'){
       const s = worldToScreen(projectile.x||0, projectile.y||0, cam);
       const angle = projectile.angle || 0;
       ctx.save();
       ctx.translate(Math.round(s.x), Math.round(s.y));
       ctx.rotate(angle);
-      ctx.fillStyle = '#d8a25b';
-      ctx.fillRect(-8, -2, 16, 4);
-      ctx.fillStyle = '#ffcf86';
-      ctx.fillRect(4, -1, 5, 2);
+      pxRect(-7,-2,12,4,'#78838d');
+      pxRect(5,-1,4,2,'#ff8c44');
+      pxRect(-9,-3,3,6,'#59626a');
       ctx.restore();
       return;
     }
@@ -871,39 +906,11 @@
   }
 
   function drawOnlineShotFx(fx, cam){
-    if(!fx || fx.ownerId === online.clientId) return;
-    const alpha = Math.max(0.08, Math.min(1, (fx.life||0) / ((fx.kind==='gatling') ? 0.06 : 0.08)));
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = fx.kind === 'gatling' ? '#ffe3a1' : 'rgba(255,240,200,0.75)';
-    ctx.lineWidth = fx.kind === 'gatling' ? 1 : 1.4;
-    ctx.beginPath();
-    ctx.moveTo(Math.round((fx.x1||0) - cam.x), Math.round((fx.y1||0) - cam.y));
-    ctx.lineTo(Math.round((fx.x2||0) - cam.x), Math.round((fx.y2||0) - cam.y));
-    ctx.stroke();
-    ctx.restore();
+    return;
   }
 
   function drawOnlineFlameFx(fx, cam){
-    if(!fx || fx.ownerId === online.clientId) return;
-    const alpha = Math.max(0.06, Math.min(1, (fx.life||0) / (fx.maxLife||0.08)));
-    const x = (fx.x||0) - cam.x;
-    const y = (fx.y||0) - cam.y;
-    const range = fx.range || 220;
-    const spread = fx.spread || 0.42;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = '#ffb158';
-    ctx.lineWidth = 3;
-    for(let i=0;i<4;i++){
-      const t = i/3;
-      const ang = (fx.angle||0) + lerp(-spread, spread, t) + rand(-0.02,0.02);
-      ctx.beginPath();
-      ctx.moveTo(Math.round(x), Math.round(y));
-      ctx.lineTo(Math.round(x + Math.cos(ang) * range * (0.7 + t*0.2)), Math.round(y + Math.sin(ang) * range * (0.7 + t*0.2)));
-      ctx.stroke();
-    }
-    ctx.restore();
+    return;
   }
 
   const __origRender = render;

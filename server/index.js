@@ -8,6 +8,10 @@ const TICK_RATE = 20;
 const SNAPSHOT_RATE = 20;
 const ROOM_MAX_PLAYERS = 2;
 const WORLD = { w: 3600, h: 2400 };
+const ROCKET_JUMP_DURATION = 0.5;
+const ROCKET_JUMP_BASE_SPEED = 420;
+const ROCKET_JUMP_BONUS_SPEED = 280;
+const ROCKET_JUMP_DAMPING_PER_SECOND = 0.12;
 const CLIENT_DIR = path.join(__dirname, '..');
 
 const server = http.createServer((req, res) => {
@@ -668,14 +672,46 @@ function updateReload(player, dt) {
     player.mag = 6;
   }
 }
+function updatePlayerTransientStates(room, dt) {
+  for (const player of currentPlayers(room)) {
+    player.rocketJumpTime = Math.max(0, (player.rocketJumpTime || 0) - dt);
+    player.knockbackTime = Math.max(0, (player.knockbackTime || 0) - dt);
+  }
+}
 function pushShotFx(room, fx) {
   room.match.shotFx.push({ id: room.match.nextEntityId++, ...fx });
 }
 function pushFlameFx(room, fx) {
   room.match.flameFx.push({ id: room.match.nextEntityId++, ...fx });
 }
+function triggerRocketJumpForPlayer(player, explosionX, explosionY, maxRadius) {
+  let dx = player.x - explosionX;
+  let dy = player.y - explosionY;
+  let d = Math.hypot(dx, dy);
+  if (d === 0) {
+    const ang = Math.atan2(player.rocketJumpVY || 0, player.rocketJumpVX || 0) || 0;
+    dx = Math.cos(ang || 0);
+    dy = Math.sin(ang || 0);
+    d = 1;
+  }
+  const nx = dx / d;
+  const ny = dy / d;
+  const proximity = clamp(1 - (d / Math.max(1, maxRadius)), 0, 1);
+  const jumpSpeed = ROCKET_JUMP_BASE_SPEED + ROCKET_JUMP_BONUS_SPEED * proximity;
+  player.rocketJumpTime = ROCKET_JUMP_DURATION;
+  player.rocketJumpVX = nx * jumpSpeed;
+  player.rocketJumpVY = ny * jumpSpeed;
+  player.dashTime = 0;
+  player.dashVX = 0;
+  player.dashVY = 0;
+  player.knockbackTime = 0;
+  player.knockbackVX = 0;
+  player.knockbackVY = 0;
+  if (player.rocketJumpVX < 0) player.faceDir = -1;
+  else if (player.rocketJumpVX > 0) player.faceDir = 1;
+}
 function spawnThrowableProjectile(room, sourcePlayer, kind, targetX, targetY, total) {
-  const arc = kind === 'molotov' ? 54 : 42;
+  const arc = kind === 'molotov' ? 62 : 54;
   room.match.projectiles.push({
     id: room.match.nextEntityId++,
     kind,
@@ -692,12 +728,13 @@ function spawnThrowableProjectile(room, sourcePlayer, kind, targetX, targetY, to
     total,
     timer: total,
     progress: 0,
-    radius: kind === 'molotov' ? 7 : 6,
+    radius: 5,
   });
 }
 function spawnRocketProjectile(room, sourcePlayer, targetX, targetY) {
   const angle = Math.atan2(targetY - sourcePlayer.y, targetX - sourcePlayer.x);
-  const speed = 820;
+  const speed = 620;
+  const targetDist = Math.max(30, Math.hypot(targetX - sourcePlayer.x, targetY - sourcePlayer.y));
   room.match.projectiles.push({
     id: room.match.nextEntityId++,
     kind: 'rocket',
@@ -709,8 +746,44 @@ function spawnRocketProjectile(room, sourcePlayer, targetX, targetY) {
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
     angle,
-    life: 1.25,
-    radius: 5,
+    life: Math.min(3.5, targetDist / speed + 0.18),
+    radius: 4,
+  });
+}
+function spawnPelletProjectile(room, sourcePlayer, angle, speed, life, damage, extra = {}) {
+  room.match.projectiles.push({
+    id: room.match.nextEntityId++,
+    kind: 'pellet',
+    ownerId: sourcePlayer?.id || null,
+    weaponKind: extra.weaponKind || 'shotgun',
+    x: sourcePlayer.x + Math.cos(angle) * (extra.startOffset || 18),
+    y: sourcePlayer.y + Math.sin(angle) * (extra.startOffset || 18),
+    startX: sourcePlayer.x + Math.cos(angle) * (extra.startOffset || 18),
+    startY: sourcePlayer.y + Math.sin(angle) * (extra.startOffset || 18),
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+    life,
+    maxLife: life,
+    damage,
+    radius: 2,
+    penetration: extra.penetration ?? null,
+    hitIds: [],
+  });
+}
+function spawnFlameProjectile(room, sourcePlayer, x, y, vx, vy, life, size, damage, swirl, heat, color) {
+  room.match.projectiles.push({
+    id: room.match.nextEntityId++,
+    kind: 'flame',
+    ownerId: sourcePlayer?.id || null,
+    x, y, vx, vy,
+    life,
+    maxLife: life,
+    size,
+    damage,
+    hitTick: 0,
+    swirl,
+    heat,
+    color,
   });
 }
 function processProjectiles(room, dt) {
@@ -734,7 +807,7 @@ function processProjectiles(room, dt) {
       p.y += p.vy * dt;
       p.life -= dt;
       p.angle = Math.atan2(p.vy, p.vx);
-      let done = dist(p.x, p.y, p.targetX, p.targetY) < 16 || p.life <= 0 || p.x < 0 || p.y < 0 || p.x > WORLD.w || p.y > WORLD.h;
+      let done = dist(p.x, p.y, p.targetX, p.targetY) < 14 || p.life <= 0 || p.x < 0 || p.y < 0 || p.x > WORLD.w || p.y > WORLD.h;
       if (!done) {
         for (const b of room.world.buildings) {
           for (const wr of getBuildingWallRects(b)) {
@@ -746,11 +819,110 @@ function processProjectiles(room, dt) {
           if (done) break;
         }
       }
+      if (!done) {
+        for (const targetPlayer of currentPlayers(room)) {
+          if (!targetPlayer.alive) continue;
+          if (dist(targetPlayer.x, targetPlayer.y, p.x, p.y) < targetPlayer.radius + p.radius + 2) {
+            done = true;
+            break;
+          }
+        }
+      }
       if (done) {
         const owner = p.ownerId ? room.match.playersById.get(p.ownerId) : null;
         applyExplosion(room, owner, clamp(p.x, 10, WORLD.w - 10), clamp(p.y, 10, WORLD.h - 10), 'rocket');
         room.match.projectiles.splice(i, 1);
       }
+      continue;
+    }
+    if (p.kind === 'pellet') {
+      const prevX = p.x;
+      const prevY = p.y;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt;
+      let removed = false;
+      for (const b of room.world.buildings) {
+        for (const wr of getBuildingWallRects(b)) {
+          if (lineIntersectsRect(prevX, prevY, p.x, p.y, wr) || circleRectCollision(p.x, p.y, p.radius, wr)) {
+            room.match.projectiles.splice(i, 1);
+            removed = true;
+            break;
+          }
+        }
+        if (removed) break;
+      }
+      if (removed) continue;
+      if (p.life <= 0 || p.x < -20 || p.x > WORLD.w + 20 || p.y < -20 || p.y > WORLD.h + 20) {
+        room.match.projectiles.splice(i, 1);
+        continue;
+      }
+      for (let j = room.match.zombies.length - 1; j >= 0; j -= 1) {
+        const z = room.match.zombies[j];
+        if ((p.hitIds || []).includes(z.id)) continue;
+        if (dist(z.x, z.y, p.x, p.y) < z.radius + p.radius + 1) {
+          let dealt = p.damage;
+          if (p.weaponKind === 'shotgun') {
+            const travel = clamp(1 - (p.life / Math.max(0.0001, p.maxLife || p.life)), 0, 1);
+            const falloffMul = 1 - travel * 0.65;
+            dealt *= Math.max(0.35, falloffMul);
+          }
+          z.hp -= dealt;
+          p.hitIds = p.hitIds || [];
+          p.hitIds.push(z.id);
+          if (z.hp <= 0) handleZombieDeath(room, j, p.ownerId || null);
+          if (p.penetration != null) {
+            p.penetration -= 1;
+            if (p.penetration <= 0) {
+              room.match.projectiles.splice(i, 1);
+            }
+          } else {
+            room.match.projectiles.splice(i, 1);
+          }
+          break;
+        }
+      }
+      continue;
+    }
+    if (p.kind === 'flame') {
+      const v = Math.hypot(p.vx, p.vy) || 1;
+      const sideX = -p.vy / v;
+      const sideY = p.vx / v;
+      p.vx += sideX * (p.swirl || 0) * dt;
+      p.vy += sideY * (p.swirl || 0) * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      const flameDamping = Math.pow(0.42, dt);
+      p.vx *= flameDamping;
+      p.vy *= flameDamping;
+      p.vy -= 30 * dt * (p.heat || 1);
+      p.life -= dt;
+      p.hitTick = (p.hitTick || 0) - dt;
+      p.size += dt * 8;
+      p.swirl = (p.swirl || 0) * Math.pow(0.7, dt * 60);
+      let removeFlame = false;
+      for (const b of room.world.buildings) {
+        for (const wr of getBuildingWallRects(b)) {
+          if (circleRectCollision(p.x, p.y, p.size * 0.35, wr)) {
+            removeFlame = true;
+            break;
+          }
+        }
+        if (removeFlame) break;
+      }
+      if (!removeFlame) {
+        for (let j = room.match.zombies.length - 1; j >= 0; j -= 1) {
+          const z = room.match.zombies[j];
+          if (dist(z.x, z.y, p.x, p.y) < z.radius + p.size) {
+            if (p.hitTick <= 0) {
+              z.hp -= p.damage * ((room.match.playersById.get(p.ownerId)?.damageMul) || 1);
+              p.hitTick = 0.06;
+              if (z.hp <= 0) handleZombieDeath(room, j, p.ownerId || null);
+            }
+          }
+        }
+      }
+      if (removeFlame || p.life <= 0) room.match.projectiles.splice(i, 1);
     }
   }
 }
@@ -773,13 +945,20 @@ function applyExplosion(room, sourcePlayer, x, y, kind = 'normal') {
   const rocket = kind === 'rocket';
   const maxRadius = rocket ? 150 : 128;
   pushEffect(room, { x, y, radius: 0, maxRadius, life: rocket ? 0.56 : 0.42, maxLife: rocket ? 0.56 : 0.42, ring: 0, rocket });
-  for (const player of currentPlayers(room)) {
-    if (!player.alive) continue;
-    const d = dist(player.x, player.y, x, y);
-    if (d < maxRadius + player.radius) {
-      const mult = rocket ? 18 : 24;
-      const dealt = Math.max(1, mult - d * (rocket ? 0.09 : 0.12)) * 0.25;
-      damagePlayerServer(room, player, dealt);
+  if (rocket) {
+    for (const player of currentPlayers(room)) {
+      if (!player.alive) continue;
+      const d = dist(player.x, player.y, x, y);
+      if (d < maxRadius + player.radius) triggerRocketJumpForPlayer(player, x, y, maxRadius);
+    }
+  } else {
+    for (const player of currentPlayers(room)) {
+      if (!player.alive) continue;
+      const d = dist(player.x, player.y, x, y);
+      if (d < maxRadius + player.radius) {
+        const dealt = Math.max(1, 24 - d * 0.12) * 0.25;
+        damagePlayerServer(room, player, dealt);
+      }
     }
   }
   for (let i = room.match.zombies.length - 1; i >= 0; i -= 1) {
@@ -1090,33 +1269,16 @@ function handleFireAction(room, sourcePlayer, payload) {
     sourcePlayer.shootCooldown = 0.48;
     for (let i = 0; i < 9; i += 1) {
       const spread = randRange(room.rng, -0.18, 0.18);
-      const fxAngle = aimAngle + spread;
-      pushShotFx(room, {
-        ownerId: sourcePlayer.id,
-        kind: 'shotgun',
-        x1: sourcePlayer.x + Math.cos(fxAngle) * 18,
-        y1: sourcePlayer.y + Math.sin(fxAngle) * 18,
-        x2: sourcePlayer.x + Math.cos(fxAngle) * 760,
-        y2: sourcePlayer.y + Math.sin(fxAngle) * 760,
-        life: 0.08,
-      });
-      rayDamage(room, sourcePlayer, aimAngle, 760, randRange(room.rng, 15, 26), 1, spread);
+      const a = aimAngle + spread;
+      const speed = randRange(room.rng, 620, 780);
+      const damage = randRange(room.rng, 15, 26);
+      spawnPelletProjectile(room, sourcePlayer, a, speed, 0.42, damage, { weaponKind: 'shotgun', startOffset: 18 });
     }
   } else if (sourcePlayer.weapon === 'gatling') {
     sourcePlayer.mag -= 1;
     sourcePlayer.shootCooldown = 0.055;
-    const spread = randRange(room.rng, -0.038, 0.038);
-    const fxAngle = aimAngle + spread;
-    pushShotFx(room, {
-      ownerId: sourcePlayer.id,
-      kind: 'gatling',
-      x1: sourcePlayer.x + Math.cos(fxAngle) * 18,
-      y1: sourcePlayer.y + Math.sin(fxAngle) * 18,
-      x2: sourcePlayer.x + Math.cos(fxAngle) * 980,
-      y2: sourcePlayer.y + Math.sin(fxAngle) * 980,
-      life: 0.06,
-    });
-    rayDamage(room, sourcePlayer, aimAngle, 980, 20, 5, spread, new Set());
+    const a = aimAngle + randRange(room.rng, -0.038, 0.038);
+    spawnPelletProjectile(room, sourcePlayer, a, 980, 0.62, 20, { weaponKind: 'gatling', startOffset: 22, penetration: 5 });
   } else if (sourcePlayer.weapon === 'rocket') {
     sourcePlayer.mag -= 1;
     sourcePlayer.shootCooldown = 0.42;
@@ -1124,27 +1286,32 @@ function handleFireAction(room, sourcePlayer, payload) {
   } else if (sourcePlayer.weapon === 'flamethrower') {
     sourcePlayer.mag -= 1;
     sourcePlayer.shootCooldown = 0.024;
-    pushFlameFx(room, {
-      ownerId: sourcePlayer.id,
-      x: sourcePlayer.x,
-      y: sourcePlayer.y,
-      angle: aimAngle,
-      life: 0.08,
-      maxLife: 0.08,
-      range: 220,
-      spread: 0.42,
-    });
-    for (let i = room.match.zombies.length - 1; i >= 0; i -= 1) {
-      const z = room.match.zombies[i];
-      const d = dist(sourcePlayer.x, sourcePlayer.y, z.x, z.y);
-      if (d > 220) continue;
-      const ang = Math.atan2(z.y - sourcePlayer.y, z.x - sourcePlayer.x);
-      let diff = Math.abs(ang - aimAngle);
-      if (diff > Math.PI) diff = Math.abs(diff - Math.PI * 2);
-      if (diff < 0.4) {
-        z.hp -= 4.8 * (sourcePlayer.damageMul || 1);
-        if (z.hp <= 0) handleZombieDeath(room, i, sourcePlayer.id);
-      }
+    const muzzleX = sourcePlayer.x + Math.cos(aimAngle) * 18;
+    const muzzleY = sourcePlayer.y + Math.sin(aimAngle) * 18;
+    for (let i = 0; i < 6; i += 1) {
+      const spread = room.rng() < 0.3 ? randRange(room.rng, -0.28, 0.28) : randRange(room.rng, -0.18, 0.18);
+      const a = aimAngle + spread;
+      const speed = randRange(room.rng, 180, 390);
+      const life = randRange(room.rng, 0.34, 0.62);
+      const size = randRange(room.rng, 2.5, 5.5);
+      const swirl = randRange(room.rng, -110, 110);
+      const heat = randRange(room.rng, 0.85, 1.2);
+      const colorRoll = room.rng();
+      const color = colorRoll > 0.6 ? 'rgba(255,205,110,0.96)' : colorRoll > 0.45 ? 'rgba(255,130,40,0.92)' : 'rgba(255,85,25,0.88)';
+      spawnFlameProjectile(
+        room,
+        sourcePlayer,
+        muzzleX + randRange(room.rng, -2.5, 2.5),
+        muzzleY + randRange(room.rng, -2.5, 2.5),
+        Math.cos(a) * speed,
+        Math.sin(a) * speed,
+        life,
+        size,
+        0.8,
+        swirl,
+        heat,
+        color,
+      );
     }
   }
 }
@@ -1219,6 +1386,9 @@ function snapshotForClient(room, client) {
     flameAmmo: p.flameAmmo,
     speedMul: p.speedMul,
     damageMul: p.damageMul,
+    rocketJumpTime: p.rocketJumpTime || 0,
+    rocketJumpVX: p.rocketJumpVX || 0,
+    rocketJumpVY: p.rocketJumpVY || 0,
     alive: p.alive,
     buffAnnouncement: p.id === client.id ? p.buffAnnouncement : '',
     buffAnnouncementTimer: p.id === client.id ? p.buffAnnouncementTimer : 0,
@@ -1290,6 +1460,7 @@ function updateRoom(room, dt) {
     match.spawnTimer -= spawnRate;
     spawnZombie(room);
   }
+  updatePlayerTransientStates(room, dt);
   for (const player of currentPlayers(room)) updateReload(player, dt);
   processPendingExplosions(room, dt);
   processProjectiles(room, dt);
