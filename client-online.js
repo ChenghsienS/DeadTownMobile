@@ -243,12 +243,14 @@
     const prevHp = online.lastServerHp == null ? player.hp : online.lastServerHp;
     const dx = self.x - player.x;
     const dy = self.y - player.y;
-    if(Math.hypot(dx,dy) > 24 || !state.running){
+    const error = Math.hypot(dx, dy);
+    const inBurstMove = (player.dashTime||0) > 0 || (player.rocketJumpTime||0) > 0 || (player.knockbackTime||0) > 0;
+    if(!state.running || error > 96){
       player.x = self.x;
       player.y = self.y;
-    }else{
-      player.x += dx * 0.55;
-      player.y += dy * 0.55;
+    }else if(!inBurstMove && error > 14){
+      player.x += dx * 0.18;
+      player.y += dy * 0.18;
     }
     player.hp = self.hp;
     player.maxHp = self.maxHp;
@@ -468,7 +470,7 @@
       <div class="controls" style="justify-content:center;flex-wrap:wrap;">
         <button id="onlineLeaveBtn">${t.leave}</button>
         <button id="onlineReadyBtn" ${room.started?'disabled':''}>${meReady?t.unready:t.ready}</button>
-        ${isHost?`<button id="onlineStartBtn" ${room.started||room.countdownEndsAt?'disabled':''}>${t.startMatch}</button>`:''}
+        ${isHost?`<button id="onlineStartBtn" ${room.started?'disabled':''}>${t.startMatch}</button>`:''}
       </div>
     `;
     $('overlay').classList.remove('hidden');
