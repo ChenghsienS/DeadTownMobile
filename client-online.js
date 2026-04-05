@@ -284,12 +284,18 @@
     online.selfAlive = !!self.alive && (self.hp||0) > 0;
     const dx = self.x - player.x;
     const dy = self.y - player.y;
-    if(Math.hypot(dx,dy) > 24 || !state.running){
+    const dist = Math.hypot(dx,dy);
+    const underServerForces = player.rocketJumpTime>0 || player.knockbackTime>0 || player.dashTime>0;
+    const shouldHardSnap = !state.running || !online.selfAlive || dist > 80;
+    if(shouldHardSnap){
       player.x = self.x;
       player.y = self.y;
-    }else{
-      player.x += dx * 0.55;
-      player.y += dy * 0.55;
+    }else if(underServerForces){
+      player.x += dx * 0.12;
+      player.y += dy * 0.12;
+    }else if(dist > 18){
+      player.x += dx * 0.18;
+      player.y += dy * 0.18;
     }
     player.hp = self.hp;
     player.maxHp = self.maxHp;
