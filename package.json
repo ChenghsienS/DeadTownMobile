@@ -1,10 +1,10 @@
 {
   "name": "deadtown-online-server",
-  "version": "1.4.0",
+  "version": "1.1.0",
   "private": true,
-  "main": "deadtown_online_server_fullsync_beta.js",
+  "main": "deadtown_online_server_authoritative_phase2.js",
   "scripts": {
-    "start": "node deadtown_online_server_fullsync_beta.js"
+    "start": "node deadtown_online_server_authoritative_phase2.js"
   },
   "dependencies": {
     "ws": "^8.18.0"
