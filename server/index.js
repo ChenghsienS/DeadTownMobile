@@ -485,13 +485,13 @@ function maybeStartCountdown(room) {
     return;
   }
   const everyoneReady = Array.from(room.players.values()).every((client) => client.ready);
-  room.countdownEndsAt = everyoneReady ? Date.now() + 3000 : null;
+  room.countdownEndsAt = everyoneReady ? Date.now() + 5000 : null;
 }
 function canStartMatch(room, requesterId) {
   if (room.started) return false;
   if (room.hostId !== requesterId) return false;
   if (room.players.size < 1) return false;
-  return Array.from(room.players.values()).every((client) => client.ready || client.id === requesterId);
+  return true;
 }
 function currentPlayers(room) {
   return Array.from(room.match.playersById.values());
