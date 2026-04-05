@@ -124,6 +124,8 @@
     syncedFlameFx: [],
     remoteParticles: [],
     seenEffectIds: new Set(),
+    seenBloodIds: new Set(),
+    seenSoundIds: new Set(),
     spectating: false,
     spectateTargetId: null,
     selfAlive: true,
@@ -207,6 +209,8 @@
     online.syncedShotFx = [];
     online.syncedFlameFx = [];
     online.seenEffectIds = new Set();
+    online.seenBloodIds = new Set();
+    online.seenSoundIds = new Set();
     online.spectating = false;
     online.spectateTargetId = null;
     online.selfAlive = true;
@@ -281,6 +285,59 @@
     if(buff === 'speed') return T[lang].serumSpeed;
     if(buff === 'health') return T[lang].serumHealth;
     return '';
+  }
+
+  function onlineAudioListenerPos(){
+    const target = onlineSpectateTarget();
+    if(target && online.spectating) return { x: target.displayX ?? target.x ?? player.x, y: target.displayY ?? target.y ?? player.y };
+    return { x: player.x, y: player.y };
+  }
+
+  function onlineShouldHearFx(x, y, maxDistance = 950){
+    if(!Number.isFinite(x) || !Number.isFinite(y)) return true;
+    const listener = onlineAudioListenerPos();
+    return dist(listener.x, listener.y, x, y) <= maxDistance;
+  }
+
+  function playOnlineSoundFx(fx, selfId){
+    if(!fx || fx.id == null) return;
+    if(online.seenSoundIds.has(fx.id)) return;
+    online.seenSoundIds.add(fx.id);
+    if((fx.kind === 'shot' || fx.kind === 'dash') && fx.ownerId && fx.ownerId === selfId) return;
+    if(!onlineShouldHearFx(fx.x, fx.y, fx.kind === 'shot' ? 1100 : 900)) return;
+    if(fx.kind === 'shot') playShot(fx.weapon || 'shotgun');
+    else if(fx.kind === 'hit' || fx.kind === 'player_hit') playHit();
+    else if(fx.kind === 'pickup') playPickup();
+    else if(fx.kind === 'dash') playDash();
+    else if(fx.kind === 'gore') playGore();
+    else if(fx.kind === 'boom') playBoom();
+  }
+
+  function reconcileOnlineBloodFx(bloodFx, selfId){
+    const activeIds = new Set();
+    for(const fx of (bloodFx || [])){
+      if(!fx || fx.id == null) continue;
+      activeIds.add(fx.id);
+      if(online.seenBloodIds.has(fx.id)) continue;
+      online.seenBloodIds.add(fx.id);
+      if(fx.targetId && fx.targetId === selfId) continue;
+      blood(fx.x, fx.y, fx.count || 8, fx.color || 'rgba(120,15,15,0.95)', fx.force || 1);
+    }
+    for(const seenId of Array.from(online.seenBloodIds)){
+      if(!activeIds.has(seenId)) online.seenBloodIds.delete(seenId);
+    }
+  }
+
+  function reconcileOnlineSoundFx(soundFx, selfId){
+    const activeIds = new Set();
+    for(const fx of (soundFx || [])){
+      if(!fx || fx.id == null) continue;
+      activeIds.add(fx.id);
+      playOnlineSoundFx(fx, selfId);
+    }
+    for(const seenId of Array.from(online.seenSoundIds)){
+      if(!activeIds.has(seenId)) online.seenSoundIds.delete(seenId);
+    }
   }
 
   function onlineAlivePeers(){
@@ -517,6 +574,8 @@
     state.fireZones = Array.isArray(match.fireZones) ? match.fireZones.map(z=>Object.assign({}, z)) : [];
     state.explosions = Array.isArray(match.effects) ? match.effects.map(e=>Object.assign({}, e)) : [];
     reconcileOnlineEffects(match.effects, selfId);
+    reconcileOnlineBloodFx(match.bloodFx, selfId);
+    reconcileOnlineSoundFx(match.soundFx, selfId);
     online.syncedProjectiles = Array.isArray(match.projectiles)
       ? match.projectiles.filter(p=>p && p.ownerId !== selfId).map(p=>mergeOnlineProjectile(null, p))
       : [];
@@ -552,6 +611,8 @@
       online.syncedFlameFx = [];
       online.remoteParticles = [];
       online.seenEffectIds = new Set();
+      online.seenBloodIds = new Set();
+      online.seenSoundIds = new Set();
       renderOnlineLobby();
       return;
     }
@@ -977,6 +1038,7 @@
     state.bossAnnouncement=Math.max(0,state.bossAnnouncement-dt);
     state.airdropAnnouncement=Math.max(0,state.airdropAnnouncement-dt);
     localReloadPredict(dt);
+    player.zombiePushTime = Math.max(0, (player.zombiePushTime || 0) - dt);
 
     const spectating = online.spectating || !online.selfAlive;
     if(spectating){

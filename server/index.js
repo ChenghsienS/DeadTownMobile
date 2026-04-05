@@ -108,6 +108,35 @@ function addDamageText(room, x, y, value, color) {
   });
   if (room.match.damageTexts.length > 160) room.match.damageTexts.splice(0, room.match.damageTexts.length - 160);
 }
+
+function pushBloodFx(room, x, y, count = 8, color = 'rgba(120,15,15,0.95)', force = 1, targetId = null) {
+  if (!room || !room.match) return;
+  room.match.bloodFx.push({
+    id: room.match.nextEntityId++,
+    x,
+    y,
+    count,
+    color,
+    force,
+    targetId,
+    life: 0.24,
+    maxLife: 0.24,
+  });
+  if (room.match.bloodFx.length > 96) room.match.bloodFx.splice(0, room.match.bloodFx.length - 96);
+}
+function pushSoundFx(room, kind, x, y, extra = {}) {
+  if (!room || !room.match) return;
+  room.match.soundFx.push({
+    id: room.match.nextEntityId++,
+    kind,
+    x,
+    y,
+    life: 0.22,
+    maxLife: 0.22,
+    ...extra,
+  });
+  if (room.match.soundFx.length > 120) room.match.soundFx.splice(0, room.match.soundFx.length - 120);
+}
 function makeRoads(world) {
   world.road = [];
   const majorV = [480, 1080, 1800, 2550, 3150];
@@ -481,6 +510,8 @@ function createMatch(room) {
     shotFx: [],
     flameFx: [],
     damageTexts: [],
+    bloodFx: [],
+    soundFx: [],
     bossAnnouncement: 0,
     airdropAnnouncement: 0,
     playersById: new Map(),
@@ -608,6 +639,8 @@ function damagePlayerServer(room, player, amount) {
   if (!player || !player.alive || player.hp <= 0) return;
   const wasAlive = player.alive && player.hp > 0;
   player.hp = Math.max(0, player.hp - amount);
+  pushBloodFx(room, player.x, player.y, 12, 'rgba(150,24,24,0.95)', 1.1, player.id);
+  pushSoundFx(room, 'player_hit', player.x, player.y, { targetId: player.id });
   if (player.hp <= 0) {
     player.hp = 0;
     player.alive = false;
@@ -742,6 +775,8 @@ function triggerBloaterDeathBurst(room, x, y, ownerId = null, deadId = null) {
 function handleZombieDeath(room, index, ownerId = null) {
   const z = room.match.zombies[index];
   if (!z) return;
+  pushBloodFx(room, z.x, z.y, z.type === 'bloater' || z.type === 'boss' ? 24 : 14, 'rgba(130,18,18,0.95)', z.type === 'boss' ? 1.15 : 1.05);
+  pushSoundFx(room, 'gore', z.x, z.y, { ownerId });
   if (z.type === 'boss') spawnBossSerum(room, z.x, z.y);
   else maybeSpawnPickup(room, z.x, z.y);
   if (ownerId && room.match.playersById.has(ownerId)) addScore(room.match.playersById.get(ownerId), z.score);
@@ -792,6 +827,7 @@ function updatePlayerTransientStates(room, dt) {
     player.dashTime = Math.max(0, (player.dashTime || 0) - dt);
     player.rocketJumpTime = Math.max(0, (player.rocketJumpTime || 0) - dt);
     player.knockbackTime = Math.max(0, (player.knockbackTime || 0) - dt);
+    player.zombiePushTime = Math.max(0, (player.zombiePushTime || 0) - dt);
     if ((player.knockbackTime || 0) > 0) {
       moveWithWallCollision(room.world, player, (player.knockbackVX || 0) * dt, (player.knockbackVY || 0) * dt);
       const knockbackDamping = Math.pow(0.08, dt);
@@ -995,6 +1031,8 @@ function processProjectiles(room, dt) {
           }
           z.hp -= dealt;
           addDamageText(room, z.x, z.y - z.radius - 10, dealt, '#ffd84d');
+          pushBloodFx(room, p.x, p.y, 5, 'rgba(120,20,20,0.9)', 0.55);
+          pushSoundFx(room, 'hit', p.x, p.y, { ownerId: p.ownerId || null });
           p.hitIds = p.hitIds || [];
           p.hitIds.push(z.id);
           if (z.hp <= 0) handleZombieDeath(room, j, p.ownerId || null);
@@ -1045,6 +1083,7 @@ function processProjectiles(room, dt) {
               const dealt = p.damage * ((room.match.playersById.get(p.ownerId)?.damageMul) || 1);
               z.hp -= dealt;
               addDamageText(room, z.x, z.y - z.radius - 10, dealt, '#ffd84d');
+              pushBloodFx(room, p.x, p.y, 3, 'rgba(255,120,40,0.7)', 0.3);
               p.hitTick = 0.06;
               if (z.hp <= 0) handleZombieDeath(room, j, p.ownerId || null);
             }
@@ -1074,15 +1113,28 @@ function processDamageTexts(room, dt) {
     if (t.life <= 0) room.match.damageTexts.splice(i, 1);
   }
 }
+
+function processTransientEventFx(room, dt) {
+  for (let i = room.match.bloodFx.length - 1; i >= 0; i -= 1) {
+    room.match.bloodFx[i].life -= dt;
+    if (room.match.bloodFx[i].life <= 0) room.match.bloodFx.splice(i, 1);
+  }
+  for (let i = room.match.soundFx.length - 1; i >= 0; i -= 1) {
+    room.match.soundFx[i].life -= dt;
+    if (room.match.soundFx[i].life <= 0) room.match.soundFx.splice(i, 1);
+  }
+}
 function applyExplosion(room, sourcePlayer, x, y, kind = 'normal') {
   if (kind === 'molotov') {
     room.match.fireZones.push({ id: room.match.nextEntityId++, x, y, radius: 96, life: 6, maxLife: 6, hitTick: 0, ownerId: sourcePlayer?.id || null });
     pushEffect(room, { x, y, radius: 0, maxRadius: 84, life: 0.34, maxLife: 0.34, ring: 0, rocket: false, molotov: true, ownerId: sourcePlayer?.id || null });
+    pushSoundFx(room, 'boom', x, y, { ownerId: sourcePlayer?.id || null, boomKind: 'molotov' });
     return;
   }
   const rocket = kind === 'rocket';
   const maxRadius = rocket ? 150 : 128;
   pushEffect(room, { x, y, radius: 0, maxRadius, life: rocket ? 0.56 : 0.42, maxLife: rocket ? 0.56 : 0.42, ring: 0, rocket, ownerId: sourcePlayer?.id || null });
+  pushSoundFx(room, 'boom', x, y, { ownerId: sourcePlayer?.id || null, boomKind: rocket ? 'rocket' : 'normal' });
   if (rocket) {
     for (const player of currentPlayers(room)) {
       if (!player.alive) continue;
@@ -1348,6 +1400,7 @@ function processAirdropsAndPickups(room, dt) {
           }
           player.reloadTimer = 0;
           player.wasReloading = false;
+          pushSoundFx(room, 'pickup', a.x, a.y, { ownerId: player.id });
           room.match.airdrops.splice(i, 1);
           break;
         }
@@ -1369,6 +1422,7 @@ function processAirdropsAndPickups(room, dt) {
         else if (item.type === 'molotov' && player.molotovs < 5) { player.molotovs += 1; picked = true; }
         else if (item.type === 'serum') { awardSerum(player, item.buff); picked = true; }
         if (picked) {
+          pushSoundFx(room, 'pickup', item.x, item.y, { ownerId: player.id });
           room.match.pickups.splice(i, 1);
           break;
         }
@@ -1435,6 +1489,7 @@ function handleFireAction(room, sourcePlayer, payload) {
   if (sourcePlayer.weapon === 'shotgun') {
     sourcePlayer.mag -= 1;
     sourcePlayer.shootCooldown = 0.48;
+    pushSoundFx(room, 'shot', sourcePlayer.x, sourcePlayer.y, { ownerId: sourcePlayer.id, weapon: 'shotgun' });
     for (let i = 0; i < 9; i += 1) {
       const spread = randRange(room.rng, -0.18, 0.18);
       const a = aimAngle + spread;
@@ -1445,15 +1500,18 @@ function handleFireAction(room, sourcePlayer, payload) {
   } else if (sourcePlayer.weapon === 'gatling') {
     sourcePlayer.mag -= 1;
     sourcePlayer.shootCooldown = 0.055;
+    pushSoundFx(room, 'shot', sourcePlayer.x, sourcePlayer.y, { ownerId: sourcePlayer.id, weapon: 'gatling' });
     const a = aimAngle + randRange(room.rng, -0.038, 0.038);
     spawnPelletProjectile(room, sourcePlayer, a, 980, 0.62, 20, { weaponKind: 'gatling', startOffset: 22, penetration: 5 });
   } else if (sourcePlayer.weapon === 'rocket') {
     sourcePlayer.mag -= 1;
     sourcePlayer.shootCooldown = 0.42;
+    pushSoundFx(room, 'shot', sourcePlayer.x, sourcePlayer.y, { ownerId: sourcePlayer.id, weapon: 'rocket' });
     spawnRocketProjectile(room, sourcePlayer, targetX, targetY);
   } else if (sourcePlayer.weapon === 'flamethrower') {
     sourcePlayer.mag -= 1;
     sourcePlayer.shootCooldown = 0.024;
+    pushSoundFx(room, 'shot', sourcePlayer.x, sourcePlayer.y, { ownerId: sourcePlayer.id, weapon: 'flamethrower' });
     const muzzleX = sourcePlayer.x + Math.cos(aimAngle) * 18;
     const muzzleY = sourcePlayer.y + Math.sin(aimAngle) * 18;
     for (let i = 0; i < 6; i += 1) {
@@ -1523,8 +1581,10 @@ function updatePlayerFromClient(client, state) {
   const player = room.match.playersById.get(client.id);
   if (!player || !player.alive) return;
   if (typeof state.name === 'string' && state.name.trim()) client.name = state.name.trim().slice(0, 18);
-  if (Number.isFinite(state.dashTime)) player.dashTime = Math.max(player.dashTime || 0, Number(state.dashTime) || 0);
-  if (!(player.carryingByCharger || (player.knockbackTime || 0) > 0) && Number.isFinite(state.x) && Number.isFinite(state.y)) {
+  const incomingDashTime = Number.isFinite(state.dashTime) ? Math.max(0, Number(state.dashTime) || 0) : 0;
+  if (incomingDashTime > 0.12 && (player.dashTime || 0) <= 0.02) pushSoundFx(room, 'dash', player.x, player.y, { ownerId: player.id });
+  if (Number.isFinite(state.dashTime)) player.dashTime = Math.max(player.dashTime || 0, incomingDashTime);
+  if (!(player.carryingByCharger || (player.knockbackTime || 0) > 0 || (player.zombiePushTime || 0) > 0) && Number.isFinite(state.x) && Number.isFinite(state.y)) {
     player.x = clamp(Number(state.x), player.radius + 2, WORLD.w - (player.radius + 2));
     player.y = clamp(Number(state.y), player.radius + 2, WORLD.h - (player.radius + 2));
     collideWithBuildings(room.world, player);
@@ -1564,6 +1624,7 @@ function snapshotForClient(room, client) {
     knockbackVX: p.knockbackVX || 0,
     knockbackVY: p.knockbackVY || 0,
     carryingByCharger: p.carryingByCharger || null,
+    zombiePushTime: p.zombiePushTime || 0,
     alive: p.alive,
     buffAnnouncement: p.id === client.id ? p.buffAnnouncement : '',
     buffAnnouncementTimer: p.id === client.id ? p.buffAnnouncementTimer : 0,
@@ -1601,6 +1662,8 @@ function snapshotForClient(room, client) {
       shotFx: room.match.shotFx.map((fx) => ({ ...fx })),
       flameFx: room.match.flameFx.map((fx) => ({ ...fx })),
       damageTexts: room.match.damageTexts.map((t) => ({ ...t })),
+      bloodFx: room.match.bloodFx.map((fx) => ({ ...fx })),
+      soundFx: room.match.soundFx.map((fx) => ({ ...fx })),
     },
   };
 }
@@ -1646,6 +1709,7 @@ function updateRoom(room, dt) {
   processEffects(room, dt);
   processShotFx(room, dt);
   processDamageTexts(room, dt);
+  processTransientEventFx(room, dt);
   if (!livingPlayers(room).length) endMatch(room, 'All players were defeated.');
 }
 
