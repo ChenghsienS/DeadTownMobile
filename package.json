@@ -2,9 +2,9 @@
   "name": "deadtown-online-server",
   "version": "1.1.0",
   "private": true,
-  "main": "deadtown_online_server_authoritative_phase2.js",
+  "main": "deadtown_online_server_parity_start.js",
   "scripts": {
-    "start": "node deadtown_online_server_authoritative_phase2.js"
+    "start": "node deadtown_online_server_parity_start.js"
   },
   "dependencies": {
     "ws": "^8.18.0"
