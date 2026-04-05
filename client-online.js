@@ -122,6 +122,7 @@
     syncedProjectiles: [],
     syncedShotFx: [],
     syncedFlameFx: [],
+    remoteParticles: [],
     spectating: false,
     spectateTargetId: null,
     selfAlive: true,
@@ -351,8 +352,50 @@
     online.lastServerHp = self.hp;
   }
 
+  function mergeOnlinePeer(prevPeer, nextPeer, now){
+    if(!prevPeer){
+      return Object.assign({}, nextPeer, {
+        targetX: nextPeer.x || 0,
+        targetY: nextPeer.y || 0,
+        displayX: nextPeer.x || 0,
+        displayY: nextPeer.y || 0,
+        vx: 0,
+        vy: 0,
+        lastSeen: now,
+      });
+    }
+    const snapDt = Math.max(0.016, Math.min(0.25, (now - (prevPeer.lastSeen || now)) / 1000));
+    const prevTargetX = prevPeer.targetX ?? prevPeer.x ?? nextPeer.x ?? 0;
+    const prevTargetY = prevPeer.targetY ?? prevPeer.y ?? nextPeer.y ?? 0;
+    const vx = ((nextPeer.x || 0) - prevTargetX) / snapDt;
+    const vy = ((nextPeer.y || 0) - prevTargetY) / snapDt;
+    return Object.assign({}, prevPeer, nextPeer, {
+      targetX: nextPeer.x || 0,
+      targetY: nextPeer.y || 0,
+      displayX: Number.isFinite(prevPeer.displayX) ? prevPeer.displayX : (nextPeer.x || 0),
+      displayY: Number.isFinite(prevPeer.displayY) ? prevPeer.displayY : (nextPeer.y || 0),
+      vx,
+      vy,
+      lastSeen: now,
+    });
+  }
+
+  function mergeOnlineProjectile(prevProjectile, nextProjectile){
+    if(!prevProjectile) return Object.assign({}, nextProjectile);
+    const merged = Object.assign({}, prevProjectile, nextProjectile);
+    for(const key of ['x','y','drawX','drawY']){
+      if(Number.isFinite(nextProjectile[key]) && Number.isFinite(prevProjectile[key])){
+        merged[key] = Math.abs(nextProjectile[key] - prevProjectile[key]) > 96
+          ? nextProjectile[key]
+          : (prevProjectile[key] * 0.6 + nextProjectile[key] * 0.4);
+      }
+    }
+    return merged;
+  }
+
   function onlineApplySnapshot(msg){
-    online.lastSnapshotAt = performance.now();
+    const now = performance.now();
+    online.lastSnapshotAt = now;
     online.roomState = msg.room || online.roomState;
     online.roomId = online.roomState?.roomId || online.roomId;
     const selfId = msg.selfId || online.clientId;
@@ -361,7 +404,7 @@
     for(const p of (msg.players || [])){
       if(!p) continue;
       if(p.id === selfId){ self = p; continue; }
-      nextPeers[p.id] = Object.assign({}, p, { lastSeen: performance.now() });
+      nextPeers[p.id] = mergeOnlinePeer(online.peers[p.id], p, now);
     }
     online.peers = nextPeers;
     onlinePickSpectateTarget();
@@ -378,9 +421,12 @@
     state.airdrops = Array.isArray(match.airdrops) ? match.airdrops.map(a=>Object.assign({}, a)) : [];
     state.fireZones = Array.isArray(match.fireZones) ? match.fireZones.map(z=>Object.assign({}, z)) : [];
     state.explosions = Array.isArray(match.effects) ? match.effects.map(e=>Object.assign({}, e)) : [];
-    online.syncedProjectiles = Array.isArray(match.projectiles) ? match.projectiles.map(p=>Object.assign({}, p)) : [];
-    online.syncedShotFx = [];
-    online.syncedFlameFx = [];
+    const prevProjectiles = new Map((online.syncedProjectiles || []).map(p=>[p.id, p]));
+    online.syncedProjectiles = Array.isArray(match.projectiles)
+      ? match.projectiles.filter(p=>p && p.ownerId !== selfId).map(p=>mergeOnlineProjectile(prevProjectiles.get(p.id), p))
+      : [];
+    online.syncedShotFx = Array.isArray(match.shotFx) ? match.shotFx.map(fx=>Object.assign({}, fx)) : [];
+    online.syncedFlameFx = Array.isArray(match.flameFx) ? match.flameFx.map(fx=>Object.assign({}, fx)) : [];
     updateHUD();
   }
 
@@ -408,6 +454,7 @@
       online.syncedProjectiles = [];
       online.syncedShotFx = [];
       online.syncedFlameFx = [];
+      online.remoteParticles = [];
       renderOnlineLobby();
       return;
     }
@@ -438,6 +485,7 @@
       online.syncedProjectiles = [];
       online.syncedShotFx = [];
       online.syncedFlameFx = [];
+      online.remoteParticles = [];
       online.gameMode = 'single';
       const rawMessage = String(msg.message || '');
       const hostNameMatch = rawMessage.match(/^(.*?)\s(?:disconnected\.|closed the room\.)/i);
@@ -609,6 +657,83 @@
     online.gameMode = 'single';
     return __origGoToMainMenu();
   };
+
+  function updateOnlineRemoteVisuals(dt){
+    for(const peer of Object.values(online.peers)){
+      const targetX = (peer.targetX ?? peer.x ?? 0) + (peer.vx || 0) * 0.032;
+      const targetY = (peer.targetY ?? peer.y ?? 0) + (peer.vy || 0) * 0.032;
+      const blend = Math.min(1, dt * 14);
+      if(!Number.isFinite(peer.displayX) || Math.abs(targetX - peer.displayX) > 140) peer.displayX = targetX;
+      else peer.displayX += (targetX - peer.displayX) * blend;
+      if(!Number.isFinite(peer.displayY) || Math.abs(targetY - peer.displayY) > 140) peer.displayY = targetY;
+      else peer.displayY += (targetY - peer.displayY) * blend;
+    }
+
+    for(let i=online.syncedProjectiles.length-1;i>=0;i--){
+      const p = online.syncedProjectiles[i];
+      if(!p) continue;
+      if(p.kind === 'grenade' || p.kind === 'molotov'){
+        p.timer = Math.max(0, (p.timer || 0) - dt);
+        p.progress = clamp(1 - p.timer / Math.max(0.0001, p.total || 1), 0, 1);
+        p.x = (p.startX || 0) + ((p.targetX || 0) - (p.startX || 0)) * p.progress;
+        p.y = (p.startY || 0) + ((p.targetY || 0) - (p.startY || 0)) * p.progress;
+        const height = Math.sin(p.progress * Math.PI) * (p.arc || 0);
+        p.drawX = p.x;
+        p.drawY = p.y - height;
+        continue;
+      }
+      if(p.kind === 'rocket'){
+        const prevX = p.x || 0;
+        const prevY = p.y || 0;
+        p.x = prevX + (p.vx || 0) * dt;
+        p.y = prevY + (p.vy || 0) * dt;
+        p.life = Math.max(0, (p.life || 0) - dt);
+        p.angle = Math.atan2(p.vy || 0, p.vx || 1);
+        for(let t=0;t<2;t++){
+          online.remoteParticles.push({
+            x:p.x-(p.vx||0)*0.01*t+rand(-1.5,1.5),
+            y:p.y-(p.vy||0)*0.01*t+rand(-1.5,1.5),
+            vx:rand(-12,12),vy:rand(-12,12),life:rand(0.18,0.3),maxLife:0.3,size:rand(2,4),
+            color:Math.random()>0.5?'rgba(255,180,90,0.75)':'rgba(80,80,80,0.5)',drag:0.95
+          });
+        }
+        continue;
+      }
+      if(p.kind === 'pellet'){
+        p.x = (p.x || 0) + (p.vx || 0) * dt;
+        p.y = (p.y || 0) + (p.vy || 0) * dt;
+        p.life = Math.max(0, (p.life || 0) - dt);
+        continue;
+      }
+      if(p.kind === 'flame'){
+        const v = Math.hypot(p.vx || 0, p.vy || 0) || 1;
+        const sideX = -(p.vy || 0) / v;
+        const sideY = (p.vx || 0) / v;
+        p.vx = (p.vx || 0) + sideX * (p.swirl || 0) * dt;
+        p.vy = (p.vy || 0) + sideY * (p.swirl || 0) * dt;
+        p.x = (p.x || 0) + (p.vx || 0) * dt;
+        p.y = (p.y || 0) + (p.vy || 0) * dt;
+        const flameDamping = Math.pow(FLAME_VELOCITY_DAMPING_PER_SECOND, dt);
+        p.vx *= flameDamping;
+        p.vy *= flameDamping;
+        p.vy -= 30 * dt * (p.heat || 1);
+        p.life = Math.max(0, (p.life || 0) - dt);
+        p.size = (p.size || 0) + dt * 8;
+        p.swirl = (p.swirl || 0) * Math.pow(0.7, dt * 60);
+      }
+    }
+
+    for(let i=online.remoteParticles.length-1;i>=0;i--){
+      const p=online.remoteParticles[i];
+      p.x += (p.vx || 0) * dt;
+      p.y += (p.vy || 0) * dt;
+      p.vx *= p.drag || 0.95;
+      p.vy *= p.drag || 0.95;
+      if(p.floaty) p.vy -= 18 * dt;
+      p.life -= dt;
+      if(p.life <= 0) online.remoteParticles.splice(i,1);
+    }
+  }
 
   function updateOnlineVisualProjectiles(dt){
     for(let i=state.grenades.length-1;i>=0;i--){
@@ -783,6 +908,7 @@
       }
     }
 
+    updateOnlineRemoteVisuals(dt);
     updateOnlineVisualProjectiles(dt);
     updateBuildingRoofs();
     bindMenuButtons();
@@ -790,11 +916,11 @@
 
     online.sendTimer -= dt;
     if(online.sendTimer<=0){
-      online.sendTimer = 0.05;
+      online.sendTimer = 0.04;
       if(!spectating){
         onlineSend({
           type:'player_state',
-          state:{ x:player.x, y:player.y, faceDir:player.faceDir, moving:!!(mx||my||mouseDown||touchState.shootHeld), name:state.playerName }
+          state:{ x:player.x, y:player.y, faceDir:player.faceDir, aimAngle:Math.atan2((camera().y+state.mouse.y)-player.y,(camera().x+state.mouse.x)-player.x), moving:!!(mx||my||mouseDown||touchState.shootHeld), name:state.playerName }
         });
       }
     }
@@ -813,7 +939,9 @@
       if(target){
         const shakeX = state.cameraShake>0?rand(-state.cameraShake,state.cameraShake):0;
         const shakeY = state.cameraShake>0?rand(-state.cameraShake,state.cameraShake):0;
-        return {x:clamp((target.x||0)-SW/2+shakeX,0,WORLD.w-SW),y:clamp((target.y||0)-SH/2+shakeY,0,WORLD.h-SH)};
+        const tx = Number.isFinite(target.displayX) ? target.displayX : (target.x || 0);
+        const ty = Number.isFinite(target.displayY) ? target.displayY : (target.y || 0);
+        return {x:clamp(tx-SW/2+shakeX,0,WORLD.w-SW),y:clamp(ty-SH/2+shakeY,0,WORLD.h-SH)};
       }
     }
     return __origCamera();
@@ -852,75 +980,56 @@
     }
   };
 
-  function drawOnlineProjectile(projectile, cam){
-    if(!projectile || projectile.ownerId === online.clientId) return;
-    if(projectile.kind === 'pellet'){
-      const x = projectile.x ?? 0;
-      const y = projectile.y ?? 0;
-      if(x<cam.x||y<cam.y||x>cam.x+SW||y>cam.y+SH) return;
-      const s = worldToScreen(x, y, cam);
-      ctx.fillStyle = '#ffd69c';
-      ctx.fillRect(px(s.x), px(s.y), 2, 2);
-      return;
-    }
-    if(projectile.kind === 'flame'){
-      const x = projectile.x ?? 0;
-      const y = projectile.y ?? 0;
-      if(x<cam.x||y<cam.y||x>cam.x+SW||y>cam.y+SH) return;
-      const s = worldToScreen(x, y, cam);
-      const size = projectile.size ?? 4;
-      const maxLife = Math.max(0.0001, projectile.maxLife || projectile.life || 0.2);
-      ctx.fillStyle = projectile.color || 'rgba(255,130,35,0.74)';
-      ctx.globalAlpha = Math.max(0, Math.min(1, (projectile.life||0) / maxLife));
-      ctx.fillRect(px(s.x-size*0.5), px(s.y-size*0.5), Math.max(1, px(size)), Math.max(1, px(size)));
-      ctx.globalAlpha = 1;
-      return;
-    }
-    if(projectile.kind === 'rocket'){
-      const s = worldToScreen(projectile.x||0, projectile.y||0, cam);
-      const angle = projectile.angle || 0;
-      ctx.save();
-      ctx.translate(Math.round(s.x), Math.round(s.y));
-      ctx.rotate(angle);
-      pxRect(-7,-2,12,4,'#78838d');
-      pxRect(5,-1,4,2,'#ff8c44');
-      pxRect(-9,-3,3,6,'#59626a');
-      ctx.restore();
-      return;
-    }
-    const drawX = projectile.drawX ?? projectile.x ?? 0;
-    const drawY = projectile.drawY ?? projectile.y ?? 0;
-    const s = worldToScreen(drawX, drawY, cam);
-    ctx.fillStyle='rgba(0,0,0,0.20)';
-    ctx.beginPath();
-    ctx.ellipse(Math.round(s.x), Math.round((projectile.y||drawY)-cam.y)+8, projectile.kind==='molotov'?8:7, 4, 0, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = projectile.kind === 'molotov' ? '#7a5a33' : '#5f6f7a';
-    ctx.beginPath();
-    ctx.arc(Math.round(s.x), Math.round(s.y), projectile.kind==='molotov'?6:5, 0, Math.PI*2);
-    ctx.fill();
-    if(projectile.kind === 'molotov'){
-      ctx.fillStyle = '#f3b35b';
-      ctx.fillRect(Math.round(s.x)-2, Math.round(s.y)-8, 4, 4);
+  function withTempRenderArrays(temp, cb){
+    const prev = {
+      grenades: state.grenades,
+      pellets: state.pellets,
+      rockets: state.rockets,
+      flameParticles: state.flameParticles,
+      particles: state.particles,
+    };
+    state.grenades = temp.grenades;
+    state.pellets = temp.pellets;
+    state.rockets = temp.rockets;
+    state.flameParticles = temp.flameParticles;
+    state.particles = temp.particles;
+    try{ cb(); }
+    finally{
+      state.grenades = prev.grenades;
+      state.pellets = prev.pellets;
+      state.rockets = prev.rockets;
+      state.flameParticles = prev.flameParticles;
+      state.particles = prev.particles;
     }
   }
 
-  function drawOnlineShotFx(fx, cam){
-    return;
-  }
-
-  function drawOnlineFlameFx(fx, cam){
-    return;
+  function buildOnlineRenderArrays(){
+    const temp = { grenades: [], pellets: [], rockets: [], flameParticles: [], particles: (online.remoteParticles || []).map(p=>Object.assign({}, p)) };
+    for(const projectile of (online.syncedProjectiles || [])){
+      if(!projectile || projectile.ownerId === online.clientId) continue;
+      if(projectile.kind === 'grenade' || projectile.kind === 'molotov') temp.grenades.push(projectile);
+      else if(projectile.kind === 'pellet') temp.pellets.push(projectile);
+      else if(projectile.kind === 'rocket') temp.rockets.push(projectile);
+      else if(projectile.kind === 'flame') temp.flameParticles.push(projectile);
+    }
+    return temp;
   }
 
   const __origRender = render;
   render = function(){
-    __origRender();
-    if(!(online.connected && online.started && state.running && !state.gameOver)) return;
+    if(!(online.connected && online.started && state.running && !state.gameOver)){
+      __origRender();
+      return;
+    }
+    const temp = buildOnlineRenderArrays();
+    withTempRenderArrays({
+      grenades: state.grenades.concat(temp.grenades),
+      pellets: state.pellets.concat(temp.pellets),
+      rockets: state.rockets.concat(temp.rockets),
+      flameParticles: state.flameParticles.concat(temp.flameParticles),
+      particles: state.particles.concat(temp.particles),
+    }, ()=>__origRender());
     const cam = camera();
-    online.syncedProjectiles.forEach(p=>drawOnlineProjectile(p, cam));
-    online.syncedShotFx.forEach(fx=>drawOnlineShotFx(fx, cam));
-    online.syncedFlameFx.forEach(fx=>drawOnlineFlameFx(fx, cam));
     Object.values(online.peers).forEach(peer=>drawRemotePlayer(peer, cam));
     ctx.textAlign='left';
     ctx.font='bold 12px Courier New';
@@ -943,25 +1052,32 @@
   };
 
   function drawRemotePlayer(peer, cam){
-    const s = worldToScreen(peer.x||0, peer.y||0, cam), x=Math.round(s.x), y=Math.round(s.y);
-    const facing = (peer.faceDir||1) < 0 ? -1 : 1;
+    const pxWorld = Number.isFinite(peer.displayX) ? peer.displayX : (peer.x || 0);
+    const pyWorld = Number.isFinite(peer.displayY) ? peer.displayY : (peer.y || 0);
+    const s = worldToScreen(pxWorld, pyWorld, cam), x=Math.round(s.x), y=Math.round(s.y);
     const alive = !!peer.alive && (peer.hp||0) > 0;
-    const body = alive ? '#6ca9ff' : '#7f7f7f';
-    const shirt = alive ? '#2c5d8f' : '#4d4d4d';
-    const skin = alive ? '#bca18f' : '#8d8d8d';
-    pxRect(x-6,y-8,12,10,skin);
-    pxRect(x-7,y+2,14,10,shirt);
-    pxRect(x-7,y+12,4,6,'#242424');
-    pxRect(x+3,y+12,4,6,'#242424');
-    ctx.fillStyle='rgba(0,0,0,0.28)';
-    ctx.fillRect(x-10,y+18,20,4);
-    if(alive) drawRotatedGun(x+(facing>0?5:-5), y+5, facing>0?0:Math.PI, body, '#d6b07a', peer.weapon||'shotgun');
+    const faceDir = (peer.faceDir||1) < 0 ? -1 : 1;
+    const aimAngle = Number.isFinite(peer.aimAngle) ? peer.aimAngle : (faceDir < 0 ? Math.PI : 0);
+    const faceColor = alive ? '#ddd4c7' : '#9a9a9a';
+    const bodyColor = alive ? '#3c342f' : '#545454';
+    const legColor = alive ? '#262626' : '#3c3c3c';
+    const gunBody = peer.weapon==='gatling'?'#545f66':peer.weapon==='rocket'?'#5a646f':peer.weapon==='flamethrower'?'#7a7a7a':'#7d614f';
+    pxRect(x-11,y+12,22,5,'rgba(0,0,0,0.2)');
+    ctx.fillStyle='rgba(0,0,0,0.65)';
     ctx.font='12px Courier New';
     ctx.textAlign='center';
-    ctx.fillStyle='rgba(0,0,0,0.65)';
-    ctx.fillText(String(peer.name||'Player'), x+1, y-13+1);
-    ctx.fillStyle=alive ? '#9cc2ff' : '#b7b7b7';
-    ctx.fillText(String(peer.name||'Player'), x, y-13);
+    ctx.fillText(String(peer.name||'Player'),x+1,y-15);
+    ctx.fillStyle=alive ? '#f0e6d8' : '#c2c2c2';
+    ctx.fillText(String(peer.name||'Player'),x,y-16);
+    pxRect(x-6,y-8,12,10,faceColor);
+    pxRect(x-6,y-10,12,3,'#1c1a1a');
+    pxRect(x-5,y-6,10,3,'#0a0a0a');
+    if(faceDir>0){ pxRect(x+5,y-3,5,2,'#6b3e1e'); pxRect(x+10,y-3,2,2,alive ? '#ff7a1a' : '#8b8b8b'); }
+    else{ pxRect(x-10,y-3,5,2,'#6b3e1e'); pxRect(x-12,y-3,2,2,alive ? '#ff7a1a' : '#8b8b8b'); }
+    pxRect(x-5,y+2,10,9,bodyColor);
+    pxRect(x-7,y+10,4,6,legColor);
+    pxRect(x+3,y+10,4,6,legColor);
+    if(alive) drawRotatedGun(x,y+4,aimAngle, gunBody, '#2c2c2c', peer.weapon||'shotgun');
     const barW=22, ratio=Math.max(0,Math.min(1,(peer.hp||0)/(peer.maxHp||100)));
     pxRect(x-barW/2,y-28,barW,4,'rgba(255,255,255,0.12)');
     pxRect(x-barW/2,y-28,barW*ratio,4,alive ? '#59c36a' : '#7d7d7d');

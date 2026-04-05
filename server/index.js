@@ -5,7 +5,7 @@ const WebSocket = require('ws');
 
 const PORT = Number(process.env.PORT || 8080);
 const TICK_RATE = 20;
-const SNAPSHOT_RATE = 20;
+const SNAPSHOT_RATE = 30;
 const ROOM_MAX_PLAYERS = 2;
 const WORLD = { w: 3600, h: 2400 };
 const ROCKET_JUMP_DURATION = 0.5;
@@ -302,6 +302,7 @@ function createPlayerState(client) {
     knockbackTime: 0,
     hurtTimer: 0,
     faceDir: 1,
+    aimAngle: 0,
     weapon: 'shotgun',
     mag: 6,
     magSize: 6,
@@ -1361,6 +1362,7 @@ function updatePlayerFromClient(client, state) {
     collideWithBuildings(room.world, player);
   }
   if (Number.isFinite(state.faceDir)) player.faceDir = state.faceDir < 0 ? -1 : 1;
+  if (Number.isFinite(state.aimAngle)) player.aimAngle = Number(state.aimAngle);
   player.moving = !!state.moving;
   player.name = client.name;
 }
@@ -1373,6 +1375,7 @@ function snapshotForClient(room, client) {
     hp: p.hp,
     maxHp: p.maxHp,
     faceDir: p.faceDir,
+    aimAngle: p.aimAngle || 0,
     weapon: p.weapon,
     moving: p.moving,
     score: p.score,
