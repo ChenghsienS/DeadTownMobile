@@ -485,13 +485,13 @@ function maybeStartCountdown(room) {
     return;
   }
   const everyoneReady = Array.from(room.players.values()).every((client) => client.ready);
-  room.countdownEndsAt = everyoneReady ? Date.now() + 5000 : null;
+  room.countdownEndsAt = everyoneReady ? Date.now() + 3000 : null;
 }
 function canStartMatch(room, requesterId) {
   if (room.started) return false;
   if (room.hostId !== requesterId) return false;
   if (room.players.size < 1) return false;
-  return true;
+  return Array.from(room.players.values()).every((client) => client.ready || client.id === requesterId);
 }
 function currentPlayers(room) {
   return Array.from(room.match.playersById.values());
@@ -574,10 +574,15 @@ function addScore(player, value) {
 }
 function damagePlayerServer(room, player, amount) {
   if (!player || !player.alive || player.hp <= 0) return;
+  const wasAlive = player.alive && player.hp > 0;
   player.hp = Math.max(0, player.hp - amount);
   if (player.hp <= 0) {
     player.hp = 0;
     player.alive = false;
+    if (wasAlive) {
+      const clientRef = clients.get(player.id);
+      broadcastToRoom(room, { type: 'player_down', playerId: player.id, name: clientRef?.name || player.name || 'Player' });
+    }
   }
 }
 function awardSerum(player, buff) {
