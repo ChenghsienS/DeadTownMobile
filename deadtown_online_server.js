@@ -32,6 +32,135 @@ function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
 function send(ws, payload) { if (ws.readyState === 1) ws.send(JSON.stringify(payload)); }
 
+function rectsOverlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
+function circleRectCollision(cx, cy, r, rect) {
+  const nx = clamp(cx, rect.x, rect.x + rect.w), ny = clamp(cy, rect.y, rect.y + rect.h);
+  const dx = cx - nx, dy = cy - ny;
+  return dx * dx + dy * dy < r * r;
+}
+function pushOutCircleRect(obj, rect) {
+  const nx = clamp(obj.x, rect.x, rect.x + rect.w), ny = clamp(obj.y, rect.y, rect.y + rect.h);
+  let dx = obj.x - nx, dy = obj.y - ny, d2 = dx * dx + dy * dy;
+  if (d2 >= obj.radius * obj.radius) return false;
+  if (d2 === 0) {
+    const left = Math.abs(obj.x - rect.x), right = Math.abs(rect.x + rect.w - obj.x), top = Math.abs(obj.y - rect.y), bottom = Math.abs(rect.y + rect.h - obj.y);
+    const min = Math.min(left, right, top, bottom);
+    if (min === left) obj.x = rect.x - obj.radius;
+    else if (min === right) obj.x = rect.x + rect.w + obj.radius;
+    else if (min === top) obj.y = rect.y - obj.radius;
+    else obj.y = rect.y + rect.h + obj.radius;
+    return true;
+  }
+  const d = Math.sqrt(d2), overlap = obj.radius - d;
+  obj.x += (dx / d) * overlap;
+  obj.y += (dy / d) * overlap;
+  return true;
+}
+function makeSeededRng(seed) {
+  let s = (seed >>> 0) || 123456789;
+  return function () {
+    s = (1664525 * s + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+function generateServerMap(seed) {
+  const rnd = makeSeededRng(seed);
+  const roads = [];
+  const majorV = [480, 1080, 1800, 2550, 3150], majorH = [360, 960, 1560, 2100];
+  for (const x of majorV) roads.push({ x: x - 50, y: 0, w: 100, h: WORLD.h });
+  for (const y of majorH) roads.push({ x: 0, y: y - 50, w: WORLD.w, h: 100 });
+  const buildings = [];
+  const safe = { x: WORLD.cx - 160, y: WORLD.cy - 120, w: 320, h: 240 };
+  const roadOverlap = (rect) => roads.some((r) => rectsOverlap(rect, r));
+  let tries = 0;
+  while (buildings.length < 42 && tries < 2000) {
+    tries++;
+    const w = Math.floor(90 + rnd() * 130);
+    const h = Math.floor(90 + rnd() * 130);
+    const x = Math.floor(40 + rnd() * (WORLD.w - w - 80));
+    const y = Math.floor(40 + rnd() * (WORLD.h - h - 80));
+    const rect = { x, y, w, h };
+    if (rectsOverlap(rect, safe) || roadOverlap(rect)) continue;
+    let bad = false;
+    for (const b of buildings) {
+      if (rectsOverlap({ x: x - 20, y: y - 20, w: w + 40, h: h + 40 }, b)) { bad = true; break; }
+    }
+    if (bad) continue;
+    const sides = ['bottom', 'top', 'left', 'right'];
+    const side = sides[Math.floor(rnd() * 4)];
+    const doorSize = 30;
+    let door;
+    if (side === 'bottom') door = { x: x + Math.floor(w / 2 - doorSize / 2), y: y + h - 10, w: doorSize, h: 20 };
+    if (side === 'top') door = { x: x + Math.floor(w / 2 - doorSize / 2), y: y - 10, w: doorSize, h: 20 };
+    if (side === 'left') door = { x: x - 10, y: y + Math.floor(h / 2 - doorSize / 2), w: 20, h: doorSize };
+    if (side === 'right') door = { x: x + w - 10, y: y + Math.floor(h / 2 - doorSize / 2), w: 20, h: doorSize };
+    buildings.push({ x, y, w, h, door });
+  }
+  return { roads, buildings };
+}
+function getBuildingWallRects(b) {
+  const t = 6;
+  if (b.door.y < b.y + 1) {
+    return [
+      { x: b.x, y: b.y, w: b.door.x - b.x, h: t },
+      { x: b.door.x + b.door.w, y: b.y, w: b.x + b.w - (b.door.x + b.door.w), h: t },
+      { x: b.x, y: b.y, w: t, h: b.h },
+      { x: b.x + b.w - t, y: b.y, w: t, h: b.h },
+      { x: b.x, y: b.y + b.h - t, w: b.w, h: t },
+    ].filter((r) => r.w > 0 && r.h > 0);
+  } else if (b.door.y > b.y + b.h - 15) {
+    return [
+      { x: b.x, y: b.y + b.h - t, w: b.door.x - b.x, h: t },
+      { x: b.door.x + b.door.w, y: b.y + b.h - t, w: b.x + b.w - (b.door.x + b.door.w), h: t },
+      { x: b.x, y: b.y, w: t, h: b.h },
+      { x: b.x + b.w - t, y: b.y, w: t, h: b.h },
+      { x: b.x, y: b.y, w: b.w, h: t },
+    ].filter((r) => r.w > 0 && r.h > 0);
+  } else if (b.door.x < b.x + 1) {
+    return [
+      { x: b.x, y: b.y, w: t, h: b.door.y - b.y },
+      { x: b.x, y: b.door.y + b.door.h, w: t, h: b.y + b.h - (b.door.y + b.door.h) },
+      { x: b.x, y: b.y, w: b.w, h: t },
+      { x: b.x, y: b.y + b.h - t, w: b.w, h: t },
+      { x: b.x + b.w - t, y: b.y, w: t, h: b.h },
+    ].filter((r) => r.w > 0 && r.h > 0);
+  }
+  return [
+    { x: b.x + b.w - t, y: b.y, w: t, h: b.door.y - b.y },
+    { x: b.x + b.w - t, y: b.door.y + b.door.h, w: t, h: b.y + b.h - (b.door.y + b.door.h) },
+    { x: b.x, y: b.y, w: b.w, h: t },
+    { x: b.x, y: b.y + b.h - t, w: b.w, h: t },
+    { x: b.x, y: b.y, w: t, h: b.h },
+  ].filter((r) => r.w > 0 && r.h > 0);
+}
+function collideWithBuildingsMap(obj, map) {
+  if (!map || !map.buildings) return;
+  for (const b of map.buildings) {
+    if (!circleRectCollision(obj.x, obj.y, obj.radius, b)) continue;
+    for (const r of getBuildingWallRects(b)) {
+      if (circleRectCollision(obj.x, obj.y, obj.radius, r)) pushOutCircleRect(obj, r);
+    }
+  }
+}
+function moveWithWorldCollision(room, obj, dx, dy) {
+  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 4));
+  const stepX = dx / steps, stepY = dy / steps;
+  for (let i = 0; i < steps; i++) {
+    obj.x += stepX;
+    obj.x = clamp(obj.x, obj.radius + 2, WORLD.w - (obj.radius + 2));
+    collideWithBuildingsMap(obj, room.map);
+    obj.y += stepY;
+    obj.y = clamp(obj.y, obj.radius + 2, WORLD.h - (obj.radius + 2));
+    collideWithBuildingsMap(obj, room.map);
+  }
+}
+function collidePlayerState(room, st, radius = 10) {
+  const proxy = { x: clamp(num(st.x, WORLD.cx), radius + 2, WORLD.w - (radius + 2)), y: clamp(num(st.y, WORLD.cy), radius + 2, WORLD.h - (radius + 2)), radius };
+  collideWithBuildingsMap(proxy, room.map);
+  st.x = proxy.x;
+  st.y = proxy.y;
+}
+
 function roomListPayload() {
   return [...rooms.values()].map((room) => ({
     roomId: room.roomId,
@@ -95,6 +224,7 @@ function createZombie(game, type, x, y) {
     state: base.state || 'approach', chargeTimer: base.chargeTimer || 0,
     chargeWindup: base.chargeWindup || 0, chargeDirX: base.chargeDirX || 0, chargeDirY: base.chargeDirY || 0,
     chargeSpeed: base.chargeSpeed || 0, chargeDuration: base.chargeDuration || 0, chargeTravel: base.chargeTravel || 0,
+    carrying: false, carryPlayerId: null, carryTime: 0, wallHit: false,
   };
 }
 function createAuthPlayer(spawnIndex = 0) {
@@ -229,7 +359,7 @@ function awardKill(room, attackerId, zombie) {
 function triggerBloaterDeathBurst(room, attackerId, zombie) {
   if (!room.game || !zombie) return;
   const radius = 74;
-  pushEffect(room.game, 'normal', zombie.x, zombie.y, 1000);
+  pushEffect(room.game, 'bloater', zombie.x, zombie.y, 1000);
   for (const p of room.players) {
     const st = room.states.get(p.id); if (!st) continue;
     const auth = ensureAuthPlayer(room, p);
@@ -298,39 +428,107 @@ function applyExplosion(room, attackerId, x, y, kind) {
     }
   }
 }
-function simulateCharger(z, target, dt) {
-  const dx = target.x - z.x, dy = target.y - z.y, d = Math.hypot(dx, dy) || 1;
+function simulateCharger(room, z, target, dt) {
+  const dx = target.state.x - z.x, dy = target.state.y - z.y, d = Math.hypot(dx, dy) || 1;
   if (z.state === 'approach') {
-    z.x += (dx / d) * z.speed * dt; z.y += (dy / d) * z.speed * dt;
-    if (d < 170) { z.state = 'windup'; z.chargeTimer = z.chargeWindup; z.chargeDirX = dx / d; z.chargeDirY = dy / d; }
+    moveWithWorldCollision(room, z, (dx / d) * z.speed * dt, (dy / d) * z.speed * dt);
+    if (d < 170) {
+      z.state = 'windup';
+      z.chargeTimer = z.chargeWindup;
+      z.chargeDirX = dx / d;
+      z.chargeDirY = dy / d;
+    }
     return;
   }
   if (z.state === 'windup') {
     z.chargeTimer -= dt;
     if (z.chargeTimer <= 0) {
-      z.state = 'charge'; z.chargeTimer = z.chargeDuration; z.chargeTravel = 0; z.chargeDirX = dx / d; z.chargeDirY = dy / d;
+      const nd = Math.hypot(target.state.x - z.x, target.state.y - z.y) || 1;
+      z.chargeDirX = (target.state.x - z.x) / nd;
+      z.chargeDirY = (target.state.y - z.y) / nd;
+      z.state = 'charge';
+      z.chargeTimer = z.chargeDuration;
+      z.chargeTravel = 0;
+      z.carrying = false;
+      z.carryPlayerId = null;
+      z.wallHit = false;
     }
     return;
   }
   if (z.state === 'charge') {
-    const stepX = z.chargeDirX * z.chargeSpeed * dt, stepY = z.chargeDirY * z.chargeSpeed * dt;
-    z.x += stepX; z.y += stepY; z.chargeTravel += Math.hypot(stepX, stepY); z.chargeTimer -= dt;
-    if (z.chargeTimer <= 0 || z.chargeTravel >= 450) { z.state = 'recover'; z.chargeTimer = 0.8; }
+    const stepX = z.chargeDirX * z.chargeSpeed * dt;
+    const stepY = z.chargeDirY * z.chargeSpeed * dt;
+    const prevX = z.x, prevY = z.y;
+    moveWithWorldCollision(room, z, stepX, stepY);
+    const moved = Math.hypot(z.x - prevX, z.y - prevY);
+    z.chargeTravel += moved;
+    z.chargeTimer -= dt;
+    if (!z.carrying && target.auth.hp > 0 && dist(z.x, z.y, target.state.x, target.state.y) < z.radius + 10 + 3) {
+      z.carrying = true;
+      z.carryPlayerId = target.id;
+      target.auth.hp = clamp(target.auth.hp - z.damage * 0.09, 0, target.auth.maxHp);
+    }
+    if (z.carrying) {
+      const carried = room.players.find((p) => p.id === z.carryPlayerId);
+      const carriedState = carried ? room.states.get(carried.id) : null;
+      const carriedAuth = carried ? ensureAuthPlayer(room, carried) : null;
+      if (carriedState && carriedAuth && carriedAuth.hp > 0) {
+        const carryX = z.x + z.chargeDirX * (z.radius + 10 - 1);
+        const carryY = z.y + z.chargeDirY * (z.radius + 10 - 1);
+        const proxy = { x: carryX, y: carryY, radius: 10 };
+        collideWithBuildingsMap(proxy, room.map);
+        carriedState.x = clamp(proxy.x, 12, WORLD.w - 12);
+        carriedState.y = clamp(proxy.y, 12, WORLD.h - 12);
+        if (Math.hypot(proxy.x - carryX, proxy.y - carryY) > 1.5) z.wallHit = true;
+        if (z.wallHit) {
+          carriedAuth.hp = clamp(carriedAuth.hp - z.damage * 0.31, 0, carriedAuth.maxHp);
+          carriedState.x = clamp(carriedState.x + z.chargeDirX * 42, 12, WORLD.w - 12);
+          carriedState.y = clamp(carriedState.y + z.chargeDirY * 42, 12, WORLD.h - 12);
+          collidePlayerState(room, carriedState, 10);
+          z.carrying = false;
+          z.carryPlayerId = null;
+          z.state = 'recover';
+          z.chargeTimer = 0.55;
+          return;
+        }
+      }
+    }
+    if (z.chargeTimer <= 0 || z.chargeTravel >= 450) {
+      if (z.carrying) {
+        const carried = room.players.find((p) => p.id === z.carryPlayerId);
+        const carriedState = carried ? room.states.get(carried.id) : null;
+        if (carriedState) {
+          carriedState.x = clamp(carriedState.x + z.chargeDirX * 58, 12, WORLD.w - 12);
+          carriedState.y = clamp(carriedState.y + z.chargeDirY * 58, 12, WORLD.h - 12);
+          collidePlayerState(room, carriedState, 10);
+        }
+      }
+      z.carrying = false;
+      z.carryPlayerId = null;
+      z.state = 'recover';
+      z.chargeTimer = 0.8;
+    }
     return;
   }
   z.chargeTimer -= dt;
   if (z.chargeTimer <= 0) z.state = 'approach';
 }
-function simulateLeaper(z, target, dt) {
+function simulateLeaper(room, z, target, dt) {
   z.pounceCd = Math.max(0, (z.pounceCd || 0) - dt);
   if ((z.pounceTime || 0) > 0) {
-    z.x += (z.vx || 0) * dt; z.y += (z.vy || 0) * dt; z.pounceTime -= dt; return;
+    moveWithWorldCollision(room, z, (z.vx || 0) * dt, (z.vy || 0) * dt);
+    z.pounceTime -= dt;
+    return;
   }
-  const dx = target.x - z.x, dy = target.y - z.y, d = Math.hypot(dx, dy) || 1;
-  z.x += (dx / d) * z.speed * dt; z.y += (dy / d) * z.speed * dt;
-  if (d < (z.boss ? 260 : 180) && z.pounceCd <= 0) {
-    const jumpSpeed = z.boss ? 260 : 340;
-    z.vx = (dx / d) * jumpSpeed; z.vy = (dy / d) * jumpSpeed; z.pounceTime = z.boss ? 0.45 : 0.28; z.pounceCd = z.boss ? 2.5 : 2.3;
+  const dx = target.state.x - z.x, dy = target.state.y - z.y, d = Math.hypot(dx, dy) || 1;
+  moveWithWorldCollision(room, z, (dx / d) * z.speed * dt, (dy / d) * z.speed * dt);
+  const triggerDist = z.boss ? 320 : 240;
+  if (d < triggerDist && z.pounceCd <= 0) {
+    z.pounceCd = z.boss ? 1.8 : 2.2 + Math.random() * 1.2;
+    z.pounceTime = z.boss ? 0.35 : 0.28;
+    const leap = z.boss ? 430 : 360;
+    z.vx = (dx / d) * leap;
+    z.vy = (dy / d) * leap;
   }
 }
 function spawnZombieForWave(room, forcedType = null) {
@@ -366,9 +564,7 @@ function simulateGame(room, dt) {
         const st = room.states.get(p.id); if (!st) continue;
         const auth = ensureAuthPlayer(room, p);
         if (auth.hp <= 0) continue;
-        if (dist(zone.x, zone.y, st.x, st.y) < zone.radius + 10) {
-          auth.hp = clamp(auth.hp - 18 * 0.125, 0, auth.maxHp);
-        }
+        if (dist(zone.x, zone.y, st.x, st.y) < zone.radius + 10) auth.hp = clamp(auth.hp - 18 * 0.125, 0, auth.maxHp);
       }
       for (let j = game.zombies.length - 1; j >= 0; j--) {
         const z = game.zombies[j];
@@ -394,9 +590,7 @@ function simulateGame(room, dt) {
     if (!ad.landed) {
       ad.fallY += 190 * dt;
       if (ad.fallY >= ad.y) { ad.fallY = ad.y; ad.landed = true; ad.parachute = false; }
-    } else {
-      ad.smoke += dt;
-    }
+    } else ad.smoke += dt;
   }
 
   for (let i = game.airdrops.length - 1; i >= 0; i--) {
@@ -434,47 +628,55 @@ function simulateGame(room, dt) {
   const spawnRate = Math.max(0.22, 1.0 - game.wave * 0.05);
   while (game.spawnTimer >= spawnRate) { game.spawnTimer -= spawnRate; spawnZombieForWave(room); }
 
-  const players = room.players.map((p) => playerSnapshot(room, p));
-  const alivePlayers = players.filter((p) => p.hp > 0);
-  if (!alivePlayers.length) return;
+  const aliveTargets = room.players.map((p) => {
+    const state = room.states.get(p.id);
+    const auth = ensureAuthPlayer(room, p);
+    if (!state || auth.hp <= 0) return null;
+    collidePlayerState(room, state, 10);
+    return { id: p.id, record: p, state, auth };
+  }).filter(Boolean);
+  if (!aliveTargets.length) return;
 
   for (const z of game.zombies) {
     z.touchTimer = Math.max(0, (z.touchTimer || 0) - dt);
-    const target = alivePlayers.reduce((best, p) => !best ? p : (dist(z.x, z.y, p.x, p.y) < dist(z.x, z.y, best.x, best.y) ? p : best), null);
+    const target = aliveTargets.reduce((best, p) => !best ? p : (dist(z.x, z.y, p.state.x, p.state.y) < dist(z.x, z.y, best.state.x, best.state.y) ? p : best), null);
     if (!target) continue;
-    if (z.type === 'charger') simulateCharger(z, target, dt);
-    else if (z.type === 'pouncer' || z.type === 'boss') simulateLeaper(z, target, dt);
+
+    if (z.type === 'charger') simulateCharger(room, z, target, dt);
+    else if (z.type === 'pouncer' || z.type === 'boss') simulateLeaper(room, z, target, dt);
     else {
-      const dx = target.x - z.x, dy = target.y - z.y, d = Math.hypot(dx, dy) || 1;
-      z.x += (dx / d) * z.speed * dt; z.y += (dy / d) * z.speed * dt;
+      const dx = target.state.x - z.x, dy = target.state.y - z.y, d = Math.hypot(dx, dy) || 1;
+      moveWithWorldCollision(room, z, (dx / d) * z.speed * dt, (dy / d) * z.speed * dt);
     }
-    z.x = clamp(z.x, 10, WORLD.w - 10); z.y = clamp(z.y, 10, WORLD.h - 10);
-    for (const p of room.players) {
-      const st = room.states.get(p.id); if (!st) continue;
-      const auth = ensureAuthPlayer(room, p);
-      if (auth.hp <= 0) continue;
-      const proxy = { x: st.x, y: st.y, radius: 10 };
-      if (dist(z.x, z.y, proxy.x, proxy.y) < (z.radius || 12) + proxy.radius) {
-        softSeparate(proxy, z, z.type === 'boss' ? 0.22 : 0.18);
-        st.x = clamp(proxy.x, 10, WORLD.w - 10);
-        st.y = clamp(proxy.y, 10, WORLD.h - 10);
-        z.x = clamp(z.x, 10, WORLD.w - 10);
-        z.y = clamp(z.y, 10, WORLD.h - 10);
+
+    z.x = clamp(z.x, z.radius + 2, WORLD.w - (z.radius + 2));
+    z.y = clamp(z.y, z.radius + 2, WORLD.h - (z.radius + 2));
+    collideWithBuildingsMap(z, room.map);
+
+    for (const tp of aliveTargets) {
+      if (z.type === 'charger') continue;
+      const playerProxy = { x: tp.state.x, y: tp.state.y, radius: 10 };
+      if (dist(z.x, z.y, playerProxy.x, playerProxy.y) < (z.radius || 12) + playerProxy.radius) {
+        softSeparate(playerProxy, z, z.type === 'boss' ? 0.22 : 0.18);
+        tp.state.x = clamp(playerProxy.x, 12, WORLD.w - 12);
+        tp.state.y = clamp(playerProxy.y, 12, WORLD.h - 12);
+        collidePlayerState(room, tp.state, 10);
+        z.x = clamp(z.x, z.radius + 2, WORLD.w - (z.radius + 2));
+        z.y = clamp(z.y, z.radius + 2, WORLD.h - (z.radius + 2));
+        collideWithBuildingsMap(z, room.map);
+      }
+      if (dist(z.x, z.y, tp.state.x, tp.state.y) < (z.radius || 12) + 11 && z.touchTimer <= 0) {
+        tp.auth.hp = clamp(tp.auth.hp - contactDamage(z, game.wave), 0, tp.auth.maxHp);
+        z.touchTimer = z.touchCooldown || (z.type === 'boss' ? 0.6 : z.type === 'bloater' ? 0.7 : z.type === 'runner' ? 0.4 : 0.55);
       }
     }
-    const authTarget = ensureAuthPlayer(room, { id: target.id });
-    if (target.hp > 0 && dist(z.x, z.y, target.x, target.y) < (z.radius || 12) + 11 && z.touchTimer <= 0) {
-      authTarget.hp = clamp(authTarget.hp - contactDamage(z, game.wave), 0, authTarget.maxHp);
-      z.touchTimer = z.touchCooldown || 0.55;
-    }
   }
+
   for (let i = 0; i < game.zombies.length; i++) {
     for (let j = i + 1; j < game.zombies.length; j++) {
       softSeparate(game.zombies[i], game.zombies[j], 0.12);
-      game.zombies[i].x = clamp(game.zombies[i].x, 10, WORLD.w - 10);
-      game.zombies[i].y = clamp(game.zombies[i].y, 10, WORLD.h - 10);
-      game.zombies[j].x = clamp(game.zombies[j].x, 10, WORLD.w - 10);
-      game.zombies[j].y = clamp(game.zombies[j].y, 10, WORLD.h - 10);
+      collideWithBuildingsMap(game.zombies[i], room.map);
+      collideWithBuildingsMap(game.zombies[j], room.map);
     }
   }
 }
@@ -483,6 +685,7 @@ function forceStartMatch(room) {
   cancelCountdown(room);
   room.started = true;
   room.worldSeed = Math.floor(Math.random() * 2147483647);
+  room.map = generateServerMap(room.worldSeed);
   room.game = createRoomGame(room);
   const payload = { type: 'match_started', room: roomPayload(room), worldSeed: room.worldSeed };
   for (const p of room.players) send(p.ws, payload);
@@ -544,7 +747,7 @@ function leaveRoom(ws) {
 }
 function snapshotPayload(room) {
   const players = room.players.map((p) => playerSnapshot(room, p));
-  const zombies = room.game ? room.game.zombies.map((z) => ({ id: z.id, type: z.type, x: z.x, y: z.y, hp: Math.max(0, z.hp), maxHp: Math.max(1, z.maxHp || z.hp), radius: z.radius, state: z.state })) : [];
+  const zombies = room.game ? room.game.zombies.map((z) => ({ id: z.id, type: z.type, x: z.x, y: z.y, hp: Math.max(0, z.hp), maxHp: Math.max(1, z.maxHp || z.hp), radius: z.radius, state: z.state, carrying: !!z.carrying })) : [];
   const pickups = room.game ? room.game.pickups.map((v) => ({ id: v.id, type: v.type, buff: v.buff, x: v.x, y: v.y, radius: v.radius, ttl: v.ttl, phase: v.phase || 0 })) : [];
   const airdrops = room.game ? room.game.airdrops.map((v) => ({ id: v.id, x: v.x, y: v.y, landed: !!v.landed, fallY: v.fallY, smoke: v.smoke || 0, parachute: !!v.parachute })) : [];
   const fireZones = room.game ? room.game.fireZones.map((v) => ({ id: v.id, x: v.x, y: v.y, radius: v.radius, life: v.life, maxLife: v.maxLife })) : [];
@@ -616,6 +819,7 @@ wss.on('connection', (ws) => {
         faceDir: num(msg.state?.faceDir, 1),
         weapon: String(msg.state?.weapon || 'shotgun'),
       });
+      collidePlayerState(room, room.states.get(c.id), 10);
       const auth = ensureAuthPlayer(room, c);
       auth.weapon = String(msg.state?.weapon || auth.weapon || 'shotgun');
       auth.mag = clamp(num(msg.state?.mag, auth.mag), 0, 9999);
