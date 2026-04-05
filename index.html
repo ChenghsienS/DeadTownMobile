@@ -1995,13 +1995,15 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
   online.seenEffectIds = new Set();
   online.selfState = null;
   online.renderZombies = new Map();
+  online.renderPeers = new Map();
   online.spectator = { active:false, targetId:null };
 
   function onlineAlivePeerIds(){
     return Object.values(online.peers||{}).filter(p=>Number(p.hp||0)>0).map(p=>p.id);
   }
   function onlineCurrentSpectatorTarget(){
-    return online.spectator.targetId ? (online.peers[online.spectator.targetId] || null) : null;
+    if(!online.spectator.targetId) return null;
+    return online.renderPeers.get(online.spectator.targetId) || online.peers[online.spectator.targetId] || null;
   }
   function onlineUpdateSpectatorUi(){
     const hud=$('spectatorHud'), label=$('spectatorLabel'), prev=$('spectatorPrevBtn'), next=$('spectatorNextBtn');
@@ -2077,6 +2079,30 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
   function onlineCloneSmoothedZombies(){
     return [...online.renderZombies.values()].map(z=>Object.assign({}, zombieBase(z.type||'walker'), z));
   }
+  function onlineSyncRenderPeers(snapshot){
+    const next = new Map();
+    (snapshot||[]).forEach(p=>{
+      if(!p || p.id===online.clientId) return;
+      const prev = online.renderPeers.get(p.id);
+      if(prev){
+        prev.tx = Number(p.x)||0; prev.ty = Number(p.y)||0;
+        Object.assign(prev, p);
+        next.set(p.id, prev);
+      }else{
+        next.set(p.id, Object.assign({}, p, { x:Number(p.x)||0, y:Number(p.y)||0, tx:Number(p.x)||0, ty:Number(p.y)||0 }));
+      }
+    });
+    online.renderPeers = next;
+  }
+  function onlineStepRenderPeers(dt){
+    const alpha = clamp(dt*11, 0.14, 0.4);
+    online.renderPeers.forEach(p=>{
+      p.x += (p.tx - p.x) * alpha;
+      p.y += (p.ty - p.y) * alpha;
+      if(Math.abs(p.tx-p.x)<0.2) p.x = p.tx;
+      if(Math.abs(p.ty-p.y)<0.2) p.y = p.ty;
+    });
+  }
   function onlineApplyLocalZombieCollision(){
     if(online.spectator.active || player.rocketJumpTime>0 || player.dashTime>0) return;
     for(const z of state.zombies){
@@ -2150,6 +2176,7 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     online.seenEffectIds = new Set();
     online.selfState = null;
     online.renderZombies = new Map();
+    online.renderPeers = new Map();
     exitOnlineSpectator();
     if(!keepConnection){ online.connected=false; online.connecting=false; online.clientId=null; online.state='idle'; }
   }
@@ -2286,6 +2313,7 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
         nextPeers[p.id] = Object.assign({}, p, {lastSeen: performance.now()});
       }
       online.peers = nextPeers;
+      onlineSyncRenderPeers(msg.players||[]);
       online.selfState = selfState;
       online.authZombies = Array.isArray(msg.zombies) ? msg.zombies.map(z=>Object.assign({}, z)) : [];
       onlineSyncRenderZombies(online.authZombies);
@@ -2428,6 +2456,7 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     online.authWave=1;
     online.selfState=null;
     online.renderZombies=new Map();
+    online.renderPeers=new Map();
     exitOnlineSpectator();
     online.gameMode='single';
     return __origGoToMainMenu();
@@ -2481,6 +2510,7 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       online.seenEffectIds.add(fx.id);
       if(fx.kind==='molotov') onlineVisualExplode({x:fx.x,y:fx.y}, 'molotov');
       else if(fx.kind==='rocket') onlineVisualExplode({x:fx.x,y:fx.y}, 'rocket');
+      else if(fx.kind==='bloater') onlineVisualExplode({x:fx.x,y:fx.y}, 'bloater');
       else onlineVisualExplode({x:fx.x,y:fx.y}, 'normal');
     }
   }
@@ -2566,6 +2596,17 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
   function onlineVisualExplode(g, kind='normal'){
     const rocket=kind==='rocket';
     const molotov=kind==='molotov';
+    const bloater=kind==='bloater';
+    if(bloater){
+      state.explosions.push({x:g.x,y:g.y,radius:0,maxRadius:74,life:0.22,maxLife:0.22,ring:0,rocket:false,bloaterBurst:true});
+      for(let i=0;i<18;i++){
+        const a=Math.random()*Math.PI*2,s=rand(40,180);
+        state.particles.push({x:g.x,y:g.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-rand(10,40),life:rand(0.18,0.38),maxLife:0.38,size:rand(2,5),color:Math.random()>0.45?'rgba(140,210,90,0.75)':'rgba(110,160,70,0.6)',drag:0.93});
+      }
+      state.cameraShake=Math.max(state.cameraShake,4.5);
+      playBoom();
+      return;
+    }
     if(molotov){
       state.explosions.push({x:g.x,y:g.y,radius:0,maxRadius:84,life:0.34,maxLife:0.34,ring:0,rocket:false,molotov:true});
       for(let k=0;k<28;k++){
@@ -2617,13 +2658,14 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       player.y = beforeSpectatorPos.y;
     }
     onlineStepRenderZombies(dt);
+    onlineStepRenderPeers(dt);
     onlineApplyAuthoritativeState();
     onlineApplyLocalZombieCollision();
     onlineProcessProjectileHits();
     onlineApplyEffects();
     online.sendTimer -= dt;
     if(!online.spectator.active && online.sendTimer<=0){
-      online.sendTimer = 0.05;
+      online.sendTimer = 0.033;
       onlineSend({
         type:'player_state',
         state:{
@@ -2645,15 +2687,15 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
   function drawRemotePlayer(peer, cam){
     const s = worldToScreen(peer.x||0, peer.y||0, cam), x=Math.round(s.x), y=Math.round(s.y);
     const facing = (peer.faceDir||1) < 0 ? -1 : 1;
-    const body = '#6ca9ff';
     const shirt = '#2c5d8f';
-    pxRect(x-6,y-8,12,10,'#bca18f');
-    pxRect(x-7,y+2,14,10,shirt);
-    pxRect(x-7,y+12,4,6,'#242424');
-    pxRect(x+3,y+12,4,6,'#242424');
+    const bob = peer.moving ? Math.round(Math.sin((performance.now()||0)/90)*1.5) : 0;
+    pxRect(x-6,y-8+bob,12,10,'#bca18f');
+    pxRect(x-7,y+2+bob,14,10,shirt);
+    pxRect(x-7,y+12+bob,4,6,'#242424');
+    pxRect(x+3,y+12+bob,4,6,'#242424');
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.fillRect(x-10,y+18,20,4);
-    drawRotatedGun(x+(facing>0?5:-5), y+5, facing>0?0:Math.PI, body, '#d6b07a', peer.weapon||'shotgun');
+    drawRotatedGun(x+(facing>0?5:-5), y+5+bob, facing>0?0:Math.PI, '#6ca9ff', '#d6b07a', peer.weapon||'shotgun');
     ctx.font='12px Courier New';
     ctx.textAlign='center';
     ctx.fillStyle='rgba(0,0,0,0.65)';
@@ -2676,7 +2718,7 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     __origRender();
     if(!(online.connected && online.started && state.running && !state.gameOver)) return;
     const cam = camera();
-    Object.values(online.peers).forEach(peer=>drawRemotePlayer(peer, cam));
+    [...online.renderPeers.values()].forEach(peer=>drawRemotePlayer(peer, cam));
     ctx.textAlign='left';
     ctx.font='bold 12px Courier New';
     ctx.fillStyle='rgba(0,0,0,0.55)';
