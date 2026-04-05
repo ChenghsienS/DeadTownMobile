@@ -4,8 +4,8 @@ const http = require('http');
 const WebSocket = require('ws');
 
 const PORT = Number(process.env.PORT || 8080);
-const TICK_RATE = 20;
-const SNAPSHOT_RATE = 30;
+const TICK_RATE = 60;
+const SNAPSHOT_RATE = 60;
 const ROOM_MAX_PLAYERS = 2;
 const WORLD = { w: 3600, h: 2400 };
 const ROCKET_JUMP_DURATION = 0.5;
@@ -605,7 +605,7 @@ function awardSerum(player, buff) {
 }
 function triggerBloaterDeathBurst(room, x, y, ownerId = null, deadId = null) {
   const radius = 74;
-  pushEffect(room, { x, y, radius: 0, maxRadius: radius, life: 0.22, maxLife: 0.22, ring: 0, rocket: false, bloaterBurst: true });
+  pushEffect(room, { x, y, radius: 0, maxRadius: radius, life: 0.22, maxLife: 0.22, ring: 0, rocket: false, bloaterBurst: true, ownerId: ownerId || null });
   for (const player of currentPlayers(room)) {
     if (!player.alive) continue;
     const pd = dist(player.x, player.y, x, y);
@@ -716,6 +716,7 @@ function spawnThrowableProjectile(room, sourcePlayer, kind, targetX, targetY, to
   room.match.projectiles.push({
     id: room.match.nextEntityId++,
     kind,
+    type: kind,
     ownerId: sourcePlayer?.id || null,
     x: sourcePlayer.x,
     y: sourcePlayer.y,
@@ -940,12 +941,12 @@ function processShotFx(room, dt) {
 function applyExplosion(room, sourcePlayer, x, y, kind = 'normal') {
   if (kind === 'molotov') {
     room.match.fireZones.push({ id: room.match.nextEntityId++, x, y, radius: 96, life: 6, maxLife: 6, hitTick: 0, ownerId: sourcePlayer?.id || null });
-    pushEffect(room, { x, y, radius: 0, maxRadius: 84, life: 0.34, maxLife: 0.34, ring: 0, rocket: false, molotov: true });
+    pushEffect(room, { x, y, radius: 0, maxRadius: 84, life: 0.34, maxLife: 0.34, ring: 0, rocket: false, molotov: true, ownerId: sourcePlayer?.id || null });
     return;
   }
   const rocket = kind === 'rocket';
   const maxRadius = rocket ? 150 : 128;
-  pushEffect(room, { x, y, radius: 0, maxRadius, life: rocket ? 0.56 : 0.42, maxLife: rocket ? 0.56 : 0.42, ring: 0, rocket });
+  pushEffect(room, { x, y, radius: 0, maxRadius, life: rocket ? 0.56 : 0.42, maxLife: rocket ? 0.56 : 0.42, ring: 0, rocket, ownerId: sourcePlayer?.id || null });
   if (rocket) {
     for (const player of currentPlayers(room)) {
       if (!player.alive) continue;
