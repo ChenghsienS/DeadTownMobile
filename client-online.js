@@ -142,6 +142,36 @@
   function onlinePersistUrl(v){ online.serverUrl = String(v || '').trim(); localStorage.setItem('deadtown_online_server_url', online.serverUrl); }
   function onlineSend(data){ if(online.ws && online.ws.readyState === 1) online.ws.send(JSON.stringify(data)); }
   function onlineSendAction(action){ if(online.connected && online.started) onlineSend({ type:'player_action', action }); }
+  function onlineSendDevCommand(command, extra={}){
+    if(!(online.connected && online.started && onlineIsMode() && state.devMode)) return false;
+    onlineSend(Object.assign({ type:'dev_command', command }, extra));
+    return true;
+  }
+
+  function bindOnlineDevButtons(){
+    const setup = [
+      ['devShotgunBtn', ()=>onlineSendDevCommand('set_weapon', { weapon:'shotgun' })],
+      ['devGatlingBtn', ()=>onlineSendDevCommand('set_weapon', { weapon:'gatling' })],
+      ['devRocketBtn', ()=>onlineSendDevCommand('set_weapon', { weapon:'rocket' })],
+      ['devFlameBtn', ()=>onlineSendDevCommand('set_weapon', { weapon:'flamethrower' })],
+      ['devHealBtn', ()=>onlineSendDevCommand('heal')],
+      ['devThrowablesBtn', ()=>onlineSendDevCommand('throwables')],
+      ['devChargerBtn', ()=>onlineSendDevCommand('spawn_charger')],
+      ['devBossBtn', ()=>onlineSendDevCommand('spawn_boss')],
+      ['devBloaterBtn', ()=>onlineSendDevCommand('spawn_bloater')],
+    ];
+    for(const [id, fn] of setup){
+      const el = $(id);
+      if(!el || el.dataset.onlineDevBound) continue;
+      el.dataset.onlineDevBound = '1';
+      el.addEventListener('click', (ev)=>{
+        if(!(online.connected && online.started && onlineIsMode() && state.devMode)) return;
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        fn();
+      }, true);
+    }
+  }
 
   const __origLoadLeaderboard = loadLeaderboard;
   loadLeaderboard = async function(force=false){ if(onlineIsMode()) return; return __origLoadLeaderboard(force); };
@@ -715,6 +745,36 @@
     }
   };
 
+  const __origSetWeaponLoadout = setWeaponLoadout;
+  setWeaponLoadout = function(choice){
+    if(onlineSendDevCommand('set_weapon', { weapon: choice })) return;
+    return __origSetWeaponLoadout(choice);
+  };
+
+  const __origSpawnCharger = typeof spawnCharger === 'function' ? spawnCharger : null;
+  if(__origSpawnCharger){
+    spawnCharger = function(dev=false){
+      if(dev && onlineSendDevCommand('spawn_charger')) return;
+      return __origSpawnCharger(dev);
+    };
+  }
+
+  const __origSpawnBoss = typeof spawnBoss === 'function' ? spawnBoss : null;
+  if(__origSpawnBoss){
+    spawnBoss = function(){
+      if(onlineSendDevCommand('spawn_boss')) return;
+      return __origSpawnBoss();
+    };
+  }
+
+  const __origSpawnDevBloater = typeof spawnDevBloater === 'function' ? spawnDevBloater : null;
+  if(__origSpawnDevBloater){
+    spawnDevBloater = function(){
+      if(onlineSendDevCommand('spawn_bloater')) return;
+      return __origSpawnDevBloater();
+    };
+  }
+
   const __origStartGameFromMenu = startGameFromMenu;
   startGameFromMenu = function(){ online.gameMode='single'; return __origStartGameFromMenu(); };
 
@@ -984,6 +1044,7 @@
     updateOnlineVisualProjectiles(dt);
     updateBuildingRoofs();
     bindMenuButtons();
+    bindOnlineDevButtons();
     updateHUD();
 
     online.sendTimer -= dt;

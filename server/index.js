@@ -639,6 +639,83 @@ function launchPlayerKnockback(player, dirX, dirY, speed, time) {
   if (player.knockbackVX < 0) player.faceDir = -1;
   else if (player.knockbackVX > 0) player.faceDir = 1;
 }
+function devSetWeaponLoadout(player, choice) {
+  player.weapon = choice;
+  if (choice === 'shotgun') {
+    player.magSize = 6; player.mag = 6;
+  } else if (choice === 'gatling') {
+    player.magSize = 120; player.mag = 120; player.gatlingAmmo = 880;
+  } else if (choice === 'rocket') {
+    player.magSize = 1; player.mag = 1; player.rocketAmmo = 49;
+  } else if (choice === 'flamethrower') {
+    player.magSize = 200; player.mag = 200; player.flameAmmo = 1500;
+  }
+  player.reloadTimer = 0;
+  player.wasReloading = false;
+}
+
+function spawnDevCharger(room, player) {
+  let x = player.x;
+  let y = player.y;
+  let tries = 0;
+  do {
+    x = clamp(player.x + randRange(room.rng, -220, 220), 30, WORLD.w - 30);
+    y = clamp(player.y + randRange(room.rng, -220, 220), 30, WORLD.h - 30);
+    tries += 1;
+  } while ((room.world.buildings.some((b) => pointInRect(x, y, b)) || dist(x, y, player.x, player.y) < 120) && tries < 120);
+  room.match.zombies.push({ id: room.match.nextEntityId++, type: 'charger', x, y, ...zombieBase(room, 'charger') });
+}
+
+function spawnDevBloater(room, player) {
+  let angle = room.rng() * Math.PI * 2;
+  let spawnDist = randRange(room.rng, 150, 240);
+  let x = clamp(player.x + Math.cos(angle) * spawnDist, 40, WORLD.w - 40);
+  let y = clamp(player.y + Math.sin(angle) * spawnDist, 40, WORLD.h - 40);
+  let tries = 0;
+  while ((room.world.buildings.some((b) => pointInRect(x, y, b)) || dist(x, y, player.x, player.y) < 120) && tries < 80) {
+    angle = room.rng() * Math.PI * 2;
+    spawnDist = randRange(room.rng, 150, 240);
+    x = clamp(player.x + Math.cos(angle) * spawnDist, 40, WORLD.w - 40);
+    y = clamp(player.y + Math.sin(angle) * spawnDist, 40, WORLD.h - 40);
+    tries += 1;
+  }
+  room.match.zombies.push({ id: room.match.nextEntityId++, type: 'bloater', x, y, ...zombieBase(room, 'bloater') });
+}
+
+function handleDevCommand(client, payload) {
+  const room = rooms.get(client.roomId);
+  if (!room || !room.started || !room.match) return;
+  const player = room.match.playersById.get(client.id);
+  if (!player) return;
+  const command = String(payload.command || '');
+  if (command === 'set_weapon') {
+    const weapon = String(payload.weapon || '');
+    if (['shotgun', 'gatling', 'rocket', 'flamethrower'].includes(weapon)) devSetWeaponLoadout(player, weapon);
+    return;
+  }
+  if (!player.alive) return;
+  if (command === 'heal') {
+    player.hp = player.maxHp;
+    return;
+  }
+  if (command === 'throwables') {
+    player.grenades = 8;
+    player.molotovs = 5;
+    return;
+  }
+  if (command === 'spawn_charger') {
+    spawnDevCharger(room, player);
+    return;
+  }
+  if (command === 'spawn_boss') {
+    spawnBoss(room);
+    return;
+  }
+  if (command === 'spawn_bloater') {
+    spawnDevBloater(room, player);
+  }
+}
+
 function triggerBloaterDeathBurst(room, x, y, ownerId = null, deadId = null) {
   const radius = 74;
   pushEffect(room, { x, y, radius: 0, maxRadius: radius, life: 0.22, maxLife: 0.22, ring: 0, rocket: false, bloaterBurst: true, ownerId: ownerId || null });
@@ -1659,6 +1736,11 @@ wss.on('connection', (ws) => {
     }
     if (msg.type === 'player_action') {
       handlePlayerAction(client, msg.action || {});
+      return;
+    }
+    if (msg.type === 'dev_command') {
+      handleDevCommand(client, msg || {});
+      return;
     }
   });
 
