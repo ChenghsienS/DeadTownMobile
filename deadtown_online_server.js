@@ -114,6 +114,21 @@ function maybeStartCountdown(room) {
   broadcastRoomUpdate(room);
 }
 
+function closeRoom(room, message, excludeWs = null) {
+  cancelCountdown(room);
+  if (room.tick) {
+    clearInterval(room.tick);
+    room.tick = null;
+  }
+  const payload = { type: 'room_closed', roomId: room.roomId, message };
+  for (const p of room.players) {
+    if (excludeWs && p.ws === excludeWs) continue;
+    send(p.ws, payload);
+  }
+  rooms.delete(room.roomId);
+  broadcastRoomList();
+}
+
 function leaveRoom(ws) {
   const client = clients.get(ws);
   if (!client || !client.roomId) return;
@@ -121,25 +136,48 @@ function leaveRoom(ws) {
   client.roomId = null;
   if (!room) return;
 
+  const wasStarted = !!room.started;
+  const wasHost = room.hostId === client.id;
+  const leaverName = client.name || 'Player';
+
   room.players = room.players.filter((p) => p.ws !== ws);
   room.states.delete(client.id);
 
+  if (wasHost) {
+    send(ws, { type: 'left_room' });
+    const message = wasStarted
+      ? `${leaverName} disconnected. The room was closed. Returning to the main menu.`
+      : `${leaverName} closed the room.`;
+    closeRoom(room, message, ws);
+    return;
+  }
+
+  send(ws, { type: 'left_room' });
+
   if (room.players.length === 0) {
     cancelCountdown(room);
-    clearInterval(room.tick);
+    if (room.tick) {
+      clearInterval(room.tick);
+      room.tick = null;
+    }
     rooms.delete(room.roomId);
     broadcastRoomList();
     return;
   }
 
-  if (room.hostId === client.id) {
-    room.hostId = room.players[0].id;
-    room.hostName = room.players[0].name;
+  if (!wasStarted) {
+    maybeStartCountdown(room);
+    broadcastRoomUpdate(room);
+    for (const p of room.players) {
+      send(p.ws, { type: 'player_left', playerId: client.id, name: leaverName, message: `${leaverName} left the room.` });
+    }
+    return;
   }
 
-  maybeStartCountdown(room);
-  send(ws, { type: 'left_room' });
   broadcastRoomUpdate(room);
+  for (const p of room.players) {
+    send(p.ws, { type: 'player_left', playerId: client.id, name: leaverName, message: `${leaverName} disconnected. The match will continue.` });
+  }
 }
 
 function startRoomTicker(room) {
