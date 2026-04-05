@@ -1842,7 +1842,7 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       startMatch: 'Start Match',
       ready: 'Ready',
       unready: 'Cancel Ready',
-      autoStarting: 'Auto starting in',
+      autoStarting: 'Starting in',
       readyStatus: 'Ready',
       unreadyStatus: 'Not Ready',
       hostReadyHint: 'The host must also ready up. The match will auto-start after everyone is ready.',
@@ -1891,7 +1891,7 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       startMatch: '开始联机',
       ready: '准备',
       unready: '取消准备',
-      autoStarting: '倒计时开始',
+      autoStarting: '开始倒计时',
       readyStatus: '已准备',
       unreadyStatus: '未准备',
       hostReadyHint: '房主也需要准备。房间内所有玩家都准备后会自动倒计时开始。',
@@ -2074,7 +2074,6 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       online.started = true;
       online.gameMode = 'online';
       online.worldSeed = Number.isInteger(msg.worldSeed)?msg.worldSeed:12345;
-      alert(ot().onlineStartInfo);
       resetGame();
       return;
     }
@@ -2101,6 +2100,7 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
   function joinOnlineRoom(id){ onlineSend({type:'join_room', roomId:id}); }
   function leaveOnlineRoom(){ onlineSend({type:'leave_room'}); }
   function toggleOnlineReady(){ onlineSend({type:'toggle_ready'}); }
+  function startOnlineMatch(){ onlineSend({type:'start_match'}); }
   function refreshOnlineRooms(){ onlineSend({type:'list_rooms'}); }
 
   function renderOnlineLobby(){
@@ -2152,6 +2152,7 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     if(!room){ renderOnlineLobby(); return; }
     const me = (room.players||[]).find(p=>p.id===online.clientId) || null;
     const meReady = !!me?.ready;
+    const isHost = online.clientId===room.hostId;
     const countdownLeft = room.countdownEndsAt ? Math.max(0, Math.ceil((room.countdownEndsAt - Date.now())/1000)) : 0;
     const playersMarkup = (room.players||[]).map(p=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-top:1px solid rgba(255,255,255,0.08);"><span>${escapeHtml(p.name)} ${p.id===room.hostId?`<span class="accent">(${t.host})</span>`:''}</span><span style="opacity:0.72;">${room.started?t.inGame:(p.ready?t.readyStatus:t.unreadyStatus)}</span></div>`).join('');
     $('overlayCard').className='card';
@@ -2166,12 +2167,14 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       <div class="controls" style="justify-content:center;flex-wrap:wrap;">
         <button id="onlineLeaveBtn">${t.leave}</button>
         <button id="onlineReadyBtn" ${room.started?'disabled':''}>${meReady?t.unready:t.ready}</button>
+        ${isHost?`<button id="onlineStartBtn" ${room.started||room.countdownEndsAt?'disabled':''}>${t.startMatch}</button>`:''}
       </div>
     `;
     $('overlay').classList.remove('hidden');
     setTimeout(()=>{
       const leave=$('onlineLeaveBtn'); if(leave) leave.onclick=()=>leaveOnlineRoom();
       const ready=$('onlineReadyBtn'); if(ready) ready.onclick=()=>toggleOnlineReady();
+      const start=$('onlineStartBtn'); if(start) start.onclick=()=>startOnlineMatch();
     },0);
   }
 
