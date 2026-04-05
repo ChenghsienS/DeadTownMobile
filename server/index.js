@@ -532,8 +532,27 @@ function startMatch(room) {
   broadcastToRoom(room, { type: 'match_started', room: roomPublicState(room), worldSeed: room.worldSeed });
   broadcastRoomList();
 }
+function buildMatchSummary(room) {
+  if (!room.match) return { surviveTime: 0, totalScore: 0, totalKills: 0, players: [] };
+  const surviveTime = Math.floor(room.match.surviveTime || 0);
+  const players = currentPlayers(room).map((p) => ({
+    id: p.id,
+    name: clients.get(p.id)?.name || p.name || 'Player',
+    score: Math.floor(p.score || 0),
+    kills: Math.floor(p.kills || 0),
+    surviveTime,
+    alive: !!p.alive && (p.hp || 0) > 0,
+  })).sort((a, b) => (b.score - a.score) || (b.kills - a.kills) || String(a.name).localeCompare(String(b.name)));
+  return {
+    surviveTime,
+    totalScore: players.reduce((sum, p) => sum + (p.score || 0), 0),
+    totalKills: players.reduce((sum, p) => sum + (p.kills || 0), 0),
+    players,
+  };
+}
 function endMatch(room, reason = 'All players down.') {
   if (!room.started) return;
+  const summary = buildMatchSummary(room);
   room.started = false;
   room.countdownEndsAt = null;
   room.match = null;
@@ -541,7 +560,7 @@ function endMatch(room, reason = 'All players down.') {
   room.worldSeed = null;
   room.rng = null;
   for (const client of room.players.values()) client.ready = false;
-  broadcastToRoom(room, { type: 'match_over', message: reason, room: roomPublicState(room) });
+  broadcastToRoom(room, { type: 'match_over', message: reason, summary, room: roomPublicState(room) });
   broadcastRoomState(room, 'room_update');
   broadcastRoomList();
 }
