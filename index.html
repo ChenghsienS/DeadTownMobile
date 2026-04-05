@@ -1853,7 +1853,7 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     en: {
       onlineBtn: 'Online Co-op',
       onlineTitle: 'ONLINE CO-OP',
-      onlineDesc: 'Public-server prototype. This first pass syncs lobby, rooms, and player movement/state. Zombie, pickup, and damage simulation are still local and are not yet authoritative multiplayer.',
+      onlineDesc: 'Authoritative co-op beta. Lobby, rooms, wave, zombies, pickups, airdrops, fire zones, and shared combat state are synchronized through the server.',
       serverUrl: 'Server URL',
       roomName: 'Room Name',
       createRoom: 'Create Room',
@@ -1902,7 +1902,7 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     zh: {
       onlineBtn: '在线合作',
       onlineTitle: '在线合作',
-      onlineDesc: '这是公网服务器初版。当前已完成大厅、房间和玩家位置/状态同步。僵尸、掉落物和伤害判定目前仍是本地单机逻辑，还不是完整多人同步。',
+      onlineDesc: '这是服务器权威联机测试版。当前已同步大厅、房间、波次、僵尸、掉落物、空投、火区和共享战斗状态。',
       serverUrl: '服务器地址',
       roomName: '房间名',
       createRoom: '创建房间',
@@ -1972,6 +1972,11 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
   window.deadtownOnline = online;
   online.authZombies = [];
   online.authWave = 1;
+  online.authPickups = [];
+  online.authAirdrops = [];
+  online.authFireZones = [];
+  online.authEffects = [];
+  online.seenEffectIds = new Set();
   online.selfState = null;
 
   function ot(){ return ONLINE_T[lang] || ONLINE_T.en; }
@@ -2017,6 +2022,11 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     online.lastSnapshotAt = 0;
     online.authZombies = [];
     online.authWave = 1;
+    online.authPickups = [];
+    online.authAirdrops = [];
+    online.authFireZones = [];
+    online.authEffects = [];
+    online.seenEffectIds = new Set();
     online.selfState = null;
     if(!keepConnection){ online.connected=false; online.connecting=false; online.clientId=null; online.state='idle'; }
   }
@@ -2155,6 +2165,10 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
       online.peers = nextPeers;
       online.selfState = selfState;
       online.authZombies = Array.isArray(msg.zombies) ? msg.zombies.map(z=>Object.assign({}, z)) : [];
+      online.authPickups = Array.isArray(msg.pickups) ? msg.pickups.map(v=>Object.assign({}, v)) : [];
+      online.authAirdrops = Array.isArray(msg.airdrops) ? msg.airdrops.map(v=>Object.assign({}, v)) : [];
+      online.authFireZones = Array.isArray(msg.fireZones) ? msg.fireZones.map(v=>Object.assign({}, v)) : [];
+      online.authEffects = Array.isArray(msg.effects) ? msg.effects.map(v=>Object.assign({}, v)) : [];
       if(Number.isFinite(msg.wave)) online.authWave = msg.wave;
       return;
     }
@@ -2316,17 +2330,46 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
   spawnAirdrop = function(){ if(onlineIsMode()) return; return __origSpawnAirdrop(); };
 
   function onlineCloneZombies(){
-    return (online.authZombies||[]).map(z=>Object.assign({}, z));
+    return (online.authZombies||[]).map(z=>Object.assign({}, zombieBase(z.type||'walker'), z));
+  }
+  function onlineClonePickups(){
+    return (online.authPickups||[]).map(v=>Object.assign({}, v));
+  }
+  function onlineCloneAirdrops(){
+    return (online.authAirdrops||[]).map(v=>Object.assign({}, v));
+  }
+  function onlineCloneFireZones(){
+    return (online.authFireZones||[]).map(v=>Object.assign({}, v));
+  }
+  function onlineApplyEffects(){
+    for(const fx of (online.authEffects||[])){
+      if(!fx || fx.id==null || online.seenEffectIds.has(fx.id)) continue;
+      online.seenEffectIds.add(fx.id);
+      if(fx.kind==='molotov') onlineVisualExplode({x:fx.x,y:fx.y}, 'molotov');
+      else if(fx.kind==='rocket') onlineVisualExplode({x:fx.x,y:fx.y}, 'rocket');
+      else onlineVisualExplode({x:fx.x,y:fx.y}, 'normal');
+    }
   }
   function onlineApplyAuthoritativeState(){
     if(Number.isFinite(online.authWave)) state.wave = online.authWave;
     state.zombies = onlineCloneZombies();
-    state.pickups = [];
-    state.airdrops = [];
+    state.pickups = onlineClonePickups();
+    state.airdrops = onlineCloneAirdrops();
+    state.fireZones = onlineCloneFireZones();
     state.bossSpawned = state.zombies.some(z=>z.type==='boss');
     if(online.selfState){
       player.maxHp = Math.max(1, Number(online.selfState.maxHp ?? player.maxHp));
       player.hp = Math.max(0, Number(online.selfState.hp ?? player.hp));
+      player.weapon = String(online.selfState.weapon || player.weapon);
+      player.mag = Math.max(0, Number(online.selfState.mag ?? player.mag));
+      player.magSize = Math.max(1, Number(online.selfState.magSize ?? player.magSize));
+      player.gatlingAmmo = Math.max(0, Number(online.selfState.gatlingAmmo ?? player.gatlingAmmo));
+      player.rocketAmmo = Math.max(0, Number(online.selfState.rocketAmmo ?? player.rocketAmmo));
+      player.flameAmmo = Math.max(0, Number(online.selfState.flameAmmo ?? player.flameAmmo));
+      player.grenades = Math.max(0, Number(online.selfState.grenades ?? player.grenades));
+      player.molotovs = Math.max(0, Number(online.selfState.molotovs ?? player.molotovs));
+      player.damageMul = Math.max(0.1, Number(online.selfState.damageMul ?? player.damageMul));
+      player.speedMul = Math.max(0.1, Number(online.selfState.speedMul ?? player.speedMul));
       state.score = Number(online.selfState.score ?? state.score);
       state.kills = Number(online.selfState.kills ?? state.kills);
       if(player.hp<=0 && !state.gameOver){
@@ -2422,9 +2465,11 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
     state.zombies = [];
     state.pickups = [];
     state.airdrops = [];
+    state.fireZones = [];
     __origUpdate(dt);
     onlineProcessProjectileHits();
     onlineApplyAuthoritativeState();
+    onlineApplyEffects();
     online.sendTimer -= dt;
     if(online.sendTimer<=0){
       online.sendTimer = 0.05;
@@ -2433,6 +2478,11 @@ updateResponsiveUI(); bindMobileControls(); const pauseTopBtn=$('pauseTopBtn'); 
         state:{
           x:player.x, y:player.y,
           faceDir:player.faceDir, weapon:player.weapon,
+          mag: player.mag, magSize: player.magSize,
+          gatlingAmmo: player.gatlingAmmo, rocketAmmo: player.rocketAmmo, flameAmmo: player.flameAmmo,
+          grenades: player.grenades, molotovs: player.molotovs,
+          damageMul: player.damageMul, speedMul: player.speedMul,
+          maxHp: player.maxHp,
           moving: !!(mouseDown || touchState.shootHeld),
           name: state.playerName,
         }
