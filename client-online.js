@@ -157,6 +157,9 @@
     selfAlive: true,
     matchSummary: null,
     matchOverMessage: '',
+    localStateSeq: 0,
+    lastAckInputSeq: 0,
+    matchStartAt: 0,
   };
   window.deadtownOnline = online;
 
@@ -233,6 +236,9 @@
     online.lastSnapshotAt = 0;
     online.pendingSnapshot = null;
     online.lastServerHp = null;
+    online.localStateSeq = 0;
+    online.lastAckInputSeq = 0;
+    online.matchStartAt = 0;
     online.syncedProjectiles = [];
     online.syncedShotFx = [];
     online.syncedFlameFx = [];
@@ -420,20 +426,25 @@
     const carriedByCharger = !!self.carryingByCharger;
     const serverZombiePush = (self.zombiePushTime||0) > 0.02;
     const inBurstMove = (player.dashTime||0) > 0 || (player.rocketJumpTime||0) > 0 || (player.knockbackTime||0) > 0;
-    if(!state.running || error > 96 || carriedByCharger || serverKnockback){
+    const ackSeq = Number(self.inputSeq || 0);
+    if(ackSeq > online.lastAckInputSeq) online.lastAckInputSeq = ackSeq;
+    const pendingInputs = Math.max(0, (online.localStateSeq || 0) - (online.lastAckInputSeq || 0));
+    const startupGrace = online.matchStartAt > 0 && (performance.now() - online.matchStartAt) < 700;
+    const staleSnapshot = pendingInputs > 2;
+    if(!state.running || error > 120 || carriedByCharger || serverKnockback){
       player.x = self.x;
       player.y = self.y;
     }else if(serverZombiePush){
-      if(error > 64){
+      if(error > 72){
         player.x = self.x;
         player.y = self.y;
-      }else if(error > 4){
-        player.x += dx * 0.38;
-        player.y += dy * 0.38;
+      }else if(error > 8){
+        player.x += dx * 0.22;
+        player.y += dy * 0.22;
       }
-    }else if(!inBurstMove && error > 14){
-      player.x += dx * 0.18;
-      player.y += dy * 0.18;
+    }else if(!(startupGrace || staleSnapshot) && !inBurstMove && error > 18){
+      player.x += dx * 0.10;
+      player.y += dy * 0.10;
     }
     player.zombiePushTime = Math.max(player.zombiePushTime||0, self.zombiePushTime||0);
     player.hp = self.hp;
@@ -666,6 +677,9 @@
       online.gameMode = 'online';
       onlineSetSpectating(false);
       online.worldSeed = Number.isInteger(msg.worldSeed) ? msg.worldSeed : 12345;
+      online.localStateSeq = 0;
+      online.lastAckInputSeq = 0;
+      online.matchStartAt = performance.now();
       pushOnlineNotice(ot().onlineStartInfo, 'info');
       resetGame();
       state.pellets = [];

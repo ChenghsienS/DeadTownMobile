@@ -370,6 +370,7 @@ function createPlayerState(client) {
     kills: 0,
     buffAnnouncement: '',
     buffAnnouncementTimer: 0,
+    lastInputSeq: 0,
   };
 }
 function reserveKeyForWeapon(weapon) {
@@ -1622,6 +1623,7 @@ function updatePlayerFromClient(client, state) {
   if (Number.isFinite(state.dashVY)) player.dashVY = Number(state.dashVY) || 0;
   if (Number.isFinite(state.dashFacing)) player.dashFacing = Number(state.dashFacing) || 0;
   if (Number.isFinite(state.dashSpinDir)) player.dashSpinDir = (Number(state.dashSpinDir) || 0) < 0 ? -1 : 1;
+  if (Number.isFinite(state.seq)) player.lastInputSeq = Math.max(player.lastInputSeq || 0, Math.floor(Number(state.seq) || 0));
   if (!(player.carryingByCharger || (player.knockbackTime || 0) > 0) && Number.isFinite(state.x) && Number.isFinite(state.y)) {
     player.x = clamp(Number(state.x), player.radius + 2, WORLD.w - (player.radius + 2));
     player.y = clamp(Number(state.y), player.radius + 2, WORLD.h - (player.radius + 2));
@@ -1668,6 +1670,7 @@ function snapshotForClient(room, client) {
     knockbackVY: p.knockbackVY || 0,
     carryingByCharger: p.carryingByCharger || null,
     zombiePushTime: p.zombiePushTime || 0,
+    inputSeq: p.id === client.id ? (p.lastInputSeq || 0) : undefined,
     alive: p.alive,
     buffAnnouncement: p.id === client.id ? p.buffAnnouncement : '',
     buffAnnouncementTimer: p.id === client.id ? p.buffAnnouncementTimer : 0,
