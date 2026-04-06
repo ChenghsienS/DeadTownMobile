@@ -1481,7 +1481,7 @@
     }else if(player.dashTime>0){
       moveWithWallCollision(player,player.dashVX*dt,player.dashVY*dt);
     }else{
-      const moveSpeed = downedLocal ? 60 : player.speed*(player.speedMul||1);
+      const moveSpeed = downedLocal ? 30 : player.speed*(player.speedMul||1);
       moveWithWallCollision(player,mx*moveSpeed*dt,my*moveSpeed*dt);
     }
 
@@ -1675,11 +1675,65 @@
     for(const peer of Object.values(online.peers || {})){
       const pxv = Number.isFinite(peer.displayX) ? peer.displayX : (peer.x || 0);
       const pyv = Number.isFinite(peer.displayY) ? peer.displayY : (peer.y || 0);
-      ctx.fillStyle='#9cc2ff';
+      ctx.fillStyle='#f0f0f0';
       ctx.fillRect(mx+pxv*sx-2,my+pyv*sy-2,mobile?3:4,mobile?3:4);
     }
     ctx.strokeStyle='rgba(255,255,255,0.4)';
     ctx.strokeRect(mx+cam.x*sx,my+cam.y*sy,SW*sx,SH*sy);
+  };
+
+  function drawOnlineSharedFog(cam){
+    const lights = [];
+    const addLight = (wx, wy, weak=false)=>{
+      if(!Number.isFinite(wx) || !Number.isFinite(wy)) return;
+      const s = worldToScreen(wx, wy, cam);
+      lights.push({x:s.x, y:s.y, weak});
+    };
+    if(!online.selfDead){ addLight(player.x, player.y, !!player.downed); }
+    for(const peer of Object.values(online.peers || {})){
+      if(!peer || peer.dead) continue;
+      addLight(Number.isFinite(peer.displayX) ? peer.displayX : peer.x, Number.isFinite(peer.displayY) ? peer.displayY : peer.y, !!peer.downed);
+    }
+    if(lights.length === 0){
+      const v=ctx.createRadialGradient(SW/2,SH/2,120,SW/2,SH/2,Math.max(SW,SH)*0.74);
+      v.addColorStop(0,'rgba(0,0,0,0.12)');
+      v.addColorStop(1,'rgba(0,0,0,0.72)');
+      ctx.fillStyle=v;
+      ctx.fillRect(0,0,SW,SH);
+      return;
+    }
+    const fogCanvas = drawOnlineSharedFog._canvas || (drawOnlineSharedFog._canvas = document.createElement('canvas'));
+    fogCanvas.width = SW; fogCanvas.height = SH;
+    const fctx = fogCanvas.getContext('2d');
+    fctx.clearRect(0,0,SW,SH);
+    fctx.fillStyle = 'rgba(0,0,0,0.70)';
+    fctx.fillRect(0,0,SW,SH);
+    fctx.globalCompositeOperation = 'destination-out';
+    for(const light of lights){
+      const inner = light.weak ? 38 : 50;
+      const outer = light.weak ? 250 : 320;
+      const g = fctx.createRadialGradient(light.x, light.y, inner, light.x, light.y, outer);
+      g.addColorStop(0, 'rgba(0,0,0,0.98)');
+      g.addColorStop(0.58, 'rgba(0,0,0,0.40)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      fctx.fillStyle = g;
+      fctx.beginPath();
+      fctx.arc(light.x, light.y, outer, 0, Math.PI * 2);
+      fctx.fill();
+    }
+    fctx.globalCompositeOperation = 'source-over';
+    const v=fctx.createRadialGradient(SW/2,SH/2,120,SW/2,SH/2,Math.max(SW,SH)*0.74);
+    v.addColorStop(0,'rgba(0,0,0,0)');
+    v.addColorStop(1,'rgba(0,0,0,0.42)');
+    fctx.fillStyle=v;
+    fctx.fillRect(0,0,SW,SH);
+    ctx.drawImage(fogCanvas,0,0);
+  }
+
+  const __origDrawFog = drawFog;
+  drawFog = function(cam){
+    if(!(online.connected && online.started && onlineIsMode() && state.running && !state.gameOver)) return __origDrawFog(cam);
+    return drawOnlineSharedFog(cam);
   };
 
   function drawOnlineScoreboardPanel(){
