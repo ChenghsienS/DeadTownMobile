@@ -1690,8 +1690,8 @@
 
   function carveFlashlight(tctx, sx, sy, ang, opts){
     const length = opts && opts.length || 520;
-    const nearW = opts && opts.nearW || 64;
-    const farW = opts && opts.farW || 250;
+    const nearW = opts && opts.nearW || 52;
+    const farW = opts && opts.farW || 170;
     const halo = opts && opts.halo || 92;
 
     const haloGrad = tctx.createRadialGradient(sx, sy, 12, sx, sy, halo);
@@ -1714,12 +1714,11 @@
     softGrad.addColorStop(1, 'rgba(0,0,0,0)');
     tctx.fillStyle = softGrad;
     tctx.beginPath();
-    tctx.moveTo(4, -nearW * 0.95);
-    tctx.lineTo(length * 0.56, -farW * 0.70);
-    tctx.lineTo(length, -farW);
-    tctx.lineTo(length, farW);
-    tctx.lineTo(length * 0.56, farW * 0.70);
-    tctx.lineTo(4, nearW * 0.95);
+    tctx.moveTo(4, -nearW * 0.92);
+    tctx.lineTo(length * 0.42, -farW * 0.58);
+    tctx.quadraticCurveTo(length * 0.86, -farW * 0.88, length, 0);
+    tctx.quadraticCurveTo(length * 0.86, farW * 0.88, length * 0.42, farW * 0.58);
+    tctx.lineTo(4, nearW * 0.92);
     tctx.closePath();
     tctx.fill();
 
@@ -1731,12 +1730,11 @@
     coreGrad.addColorStop(1, 'rgba(0,0,0,0)');
     tctx.fillStyle = coreGrad;
     tctx.beginPath();
-    tctx.moveTo(8, -nearW * 0.56);
-    tctx.lineTo(length * 0.35, -farW * 0.32);
-    tctx.lineTo(length, -farW * 0.56);
-    tctx.lineTo(length, farW * 0.56);
-    tctx.lineTo(length * 0.35, farW * 0.32);
-    tctx.lineTo(8, nearW * 0.56);
+    tctx.moveTo(8, -nearW * 0.52);
+    tctx.lineTo(length * 0.34, -farW * 0.26);
+    tctx.quadraticCurveTo(length * 0.82, -farW * 0.42, length * 0.96, 0);
+    tctx.quadraticCurveTo(length * 0.82, farW * 0.42, length * 0.34, farW * 0.26);
+    tctx.lineTo(8, nearW * 0.52);
     tctx.closePath();
     tctx.fill();
 
@@ -1756,7 +1754,7 @@
     tctx.globalCompositeOperation = 'destination-out';
 
     const selfPos = worldToScreen(player.x, player.y, cam);
-    carveFlashlight(tctx, selfPos.x, selfPos.y, localFlashlightAngle(cam), { length: 560, nearW: 60, farW: 230, halo: 96 });
+    carveFlashlight(tctx, selfPos.x, selfPos.y, localFlashlightAngle(cam), { length: 560, nearW: 50, farW: 165, halo: 96 });
 
     if(online.connected && online.started && onlineIsMode()){
       for(const peer of Object.values(online.peers || {})){
@@ -1764,7 +1762,7 @@
         const pxv = Number.isFinite(peer.displayX) ? peer.displayX : (peer.x || 0);
         const pyv = Number.isFinite(peer.displayY) ? peer.displayY : (peer.y || 0);
         const s = worldToScreen(pxv, pyv, cam);
-        carveFlashlight(tctx, s.x, s.y, peerFlashlightAngle(peer), { length: 560, nearW: 60, farW: 230, halo: 88 });
+        carveFlashlight(tctx, s.x, s.y, peerFlashlightAngle(peer), { length: 560, nearW: 50, farW: 165, halo: 88 });
       }
     }
     tctx.globalCompositeOperation = 'source-over';
