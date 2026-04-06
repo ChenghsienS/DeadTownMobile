@@ -217,36 +217,6 @@
   function onlineSend(data){ if(online.ws && online.ws.readyState === 1) online.ws.send(JSON.stringify(data)); }
   function onlineSendAction(action){ if(online.connected && online.started) onlineSend({ type:'player_action', action }); }
 
-
-  function hashString(str){
-    let h = 2166136261 >>> 0;
-    const s = String(str || '');
-    for(let i=0;i<s.length;i++){
-      h ^= s.charCodeAt(i);
-      h = Math.imul(h, 16777619);
-    }
-    return h >>> 0;
-  }
-  function onlineUnnamedPlayerName(name){
-    const n = String(name || '').trim();
-    return !n || /^player\d*$/i.test(n);
-  }
-  const ONLINE_SURVIVOR_VARIANTS = [
-    { face:'#d6c8b7', hair:'#2a2522', body:'#4a433c', legs:'#242424', strap:'#6e5f4c', muzzle:'#b58a54', gunBody:'#7d614f', gunTrim:'#2c2c2c', style:0 },
-    { face:'#cdbca9', hair:'#302a26', body:'#46504b', legs:'#252728', strap:'#5d6b60', muzzle:'#8d775d', gunBody:'#6e6d67', gunTrim:'#2c2c2c', style:1 },
-    { face:'#d3c3af', hair:'#231f1d', body:'#524742', legs:'#2b2928', strap:'#7b6453', muzzle:'#9b7a55', gunBody:'#75675b', gunTrim:'#2b2b2b', style:2 },
-    { face:'#d1c1ac', hair:'#262321', body:'#43494d', legs:'#242629', strap:'#637078', muzzle:'#8b7460', gunBody:'#68717a', gunTrim:'#272727', style:3 },
-    { face:'#cab9a4', hair:'#2d2622', body:'#4d5347', legs:'#262825', strap:'#77806f', muzzle:'#917658', gunBody:'#72705f', gunTrim:'#2a2a2a', style:4 },
-    { face:'#d0bea8', hair:'#2b2427', body:'#51484b', legs:'#292628', strap:'#80646f', muzzle:'#95715a', gunBody:'#6b6569', gunTrim:'#272727', style:5 },
-  ];
-  function onlinePeerPalette(peer){
-    if(!peer) return null;
-    const hostId = online.roomState && online.roomState.hostId;
-    if(peer.id === hostId) return null;
-    if(!onlineUnnamedPlayerName(peer.name)) return null;
-    return ONLINE_SURVIVOR_VARIANTS[hashString(peer.id || peer.name || 'peer') % ONLINE_SURVIVOR_VARIANTS.length];
-  }
-
   const __origLoadLeaderboard = loadLeaderboard;
   loadLeaderboard = async function(force=false){ if(onlineIsMode()) return; return __origLoadLeaderboard(force); };
   const __origSyncPlayerBest = syncPlayerBest;
@@ -914,48 +884,26 @@
     ctx.fillText(`${ot().peers}: ${Object.keys(online.peers).length}`, 20, SH-24);
   };
 
-
   function drawRemotePlayer(peer, cam){
     const s = worldToScreen(peer.x||0, peer.y||0, cam), x=Math.round(s.x), y=Math.round(s.y);
     const facing = (peer.faceDir||1) < 0 ? -1 : 1;
-    const barW=22, ratio=Math.max(0,Math.min(1,(peer.hp||0)/(peer.maxHp||100)));
-    const palette = onlinePeerPalette(peer);
-    const faceColor = palette ? palette.face : '#ddd4c7';
-    const hairColor = palette ? palette.hair : '#1c1a1a';
-    const bodyColor = palette ? palette.body : '#3c342f';
-    const legsColor = palette ? palette.legs : '#262626';
-    const strapColor = palette ? palette.strap : '#6b3e1e';
-    const muzzleColor = palette ? palette.muzzle : '#ff7a1a';
-    const gunBody = palette ? palette.gunBody : (peer.weapon==='gatling'?'#545f66':peer.weapon==='rocket'?'#5a646f':peer.weapon==='flamethrower'?'#7a7a7a':'#7d614f');
-    const gunTrim = palette ? palette.gunTrim : '#2c2c2c';
-
+    const body = '#6ca9ff';
+    const shirt = '#2c5d8f';
+    pxRect(x-6,y-8,12,10,'#bca18f');
+    pxRect(x-7,y+2,14,10,shirt);
+    pxRect(x-7,y+12,4,6,'#242424');
+    pxRect(x+3,y+12,4,6,'#242424');
     ctx.fillStyle='rgba(0,0,0,0.28)';
     ctx.fillRect(x-10,y+18,20,4);
-    pxRect(x-6,y-8,12,10,faceColor);
-    pxRect(x-6,y-10,12,3,hairColor);
-    if(palette && (palette.style === 1 || palette.style === 4)) pxRect(x-7,y-7,14,2,strapColor);
-    else pxRect(x-5,y-6,10,3,'#0a0a0a');
-    if(facing>0){
-      pxRect(x+5,y-3,5,2,strapColor);
-      pxRect(x+10,y-3,2,2,muzzleColor);
-    }else{
-      pxRect(x-10,y-3,5,2,strapColor);
-      pxRect(x-12,y-3,2,2,muzzleColor);
-    }
-    pxRect(x-5,y+2,10,9,bodyColor);
-    if(palette && (palette.style === 0 || palette.style === 3)) pxRect(x-2,y+2,4,9,strapColor);
-    if(palette && (palette.style === 2 || palette.style === 5)) pxRect(facing>0?x-8:x+4,y+3,3,7,strapColor);
-    pxRect(x-7,y+10,4,6,legsColor);
-    pxRect(x+3,y+10,4,6,legsColor);
-    drawRotatedGun(x+(facing>0?5:-5), y+5, facing>0?0:Math.PI, gunBody, gunTrim, peer.weapon||'shotgun');
+    drawRotatedGun(x+(facing>0?5:-5), y+5, facing>0?0:Math.PI, body, '#d6b07a', peer.weapon||'shotgun');
     ctx.font='12px Courier New';
     ctx.textAlign='center';
     ctx.fillStyle='rgba(0,0,0,0.65)';
     ctx.fillText(String(peer.name||'Player'), x+1, y-13+1);
-    ctx.fillStyle=palette ? '#d8d0c5' : '#f0e6d8';
+    ctx.fillStyle='#9cc2ff';
     ctx.fillText(String(peer.name||'Player'), x, y-13);
+    const barW=22, ratio=Math.max(0,Math.min(1,(peer.hp||0)/(peer.maxHp||100)));
     pxRect(x-barW/2,y-28,barW,4,'rgba(255,255,255,0.12)');
     pxRect(x-barW/2,y-28,barW*ratio,4,'#59c36a');
   }
-
 })();
