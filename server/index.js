@@ -10,7 +10,7 @@ const ROOM_MAX_PLAYERS = 6;
 const ROOM_APPEARANCE_COUNT = 8;
 const REVIVE_RADIUS = 72;
 const REVIVE_TIME = 5;
-const DOWNED_MOVE_SPEED = 30;
+const DOWNED_MOVE_SPEED = 60;
 const MAX_ACTIVE_CLIENTS = 60;
 const WORLD = { w: 3600, h: 2400 };
 const ROCKET_JUMP_DURATION = 0.5;
@@ -1858,7 +1858,6 @@ function snapshotForClient(room, client) {
       damageTexts: room.match.damageTexts.map((t) => ({ ...t })),
       bloodFx: room.match.bloodFx.map((fx) => ({ ...fx })),
       soundFx: room.match.soundFx.map((fx) => ({ ...fx })),
-      tombstones: room.match.tombstones.map((t) => ({ ...t })),
     },
   };
 }
