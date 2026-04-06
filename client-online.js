@@ -449,6 +449,8 @@
     player.flameAmmo = self.flameAmmo ?? player.flameAmmo;
     player.speedMul = self.speedMul ?? player.speedMul;
     player.damageMul = self.damageMul ?? player.damageMul;
+    player.score = self.score ?? player.score ?? state.score ?? 0;
+    player.kills = self.kills ?? player.kills ?? state.kills ?? 0;
     if((self.rocketJumpTime||0) > 0.02 && (player.rocketJumpTime||0) <= 0.02){
       player.rocketJumpTime = self.rocketJumpTime || 0;
       player.rocketJumpVX = self.rocketJumpVX || 0;
@@ -1395,25 +1397,36 @@
 
   function getOnlineScoreEntries(){
     const entries = [];
-    entries.push({ id: online.clientId || 'self', name: state.playerName || 'Player', score: Math.round(player.score || 0) });
+    const selfScore = Number.isFinite(state.score) ? state.score : (Number.isFinite(player.score) ? player.score : 0);
+    entries.push({ id: online.clientId || 'self', name: state.playerName || 'Player', score: Math.round(selfScore || 0) });
     for(const peer of Object.values(online.peers || {})) entries.push({ id: peer.id, name: peer.name || 'Player', score: Math.round(peer.score || 0) });
-    entries.sort((a,b)=> (b.score||0) - (a.score||0));
+    entries.sort((a,b)=>{
+      const ds = (b.score||0) - (a.score||0);
+      if(ds) return ds;
+      if(a.id === online.clientId) return -1;
+      if(b.id === online.clientId) return 1;
+      return String(a.name||'').localeCompare(String(b.name||''));
+    });
     return entries;
   }
 
   function getOnlineScoreboardLayout(){
     const mobile = MOBILE_MODE;
     const entries = getOnlineScoreEntries();
-    const mw = mobile ? 118 : 180;
+    const mw = mobile ? 136 : 196;
     const mh = mobile ? 76 : 120;
-    const rowH = mobile ? 14 : 16;
-    const headerH = mobile ? 18 : 20;
-    const totalH = mobile ? 16 : 18;
-    const panelH = headerH + entries.length * rowH + totalH + 10;
+    const rowH = mobile ? 16 : 18;
+    const headerH = mobile ? 24 : 26;
+    const totalH = mobile ? 20 : 22;
+    const panelH = headerH + entries.length * rowH + totalH + 12;
     const mx = mobile ? (SW - mw - 8) : (SW - mw - 14);
-    let my = mobile ? 8 : (SH - mh - 14 - panelH - 8);
-    if(my < 8) my = 8;
-    const panelY = my + mh + 8;
+    const baseMinimapY = SH - mh - 14;
+    let panelY = baseMinimapY - panelH - 8;
+    let my = baseMinimapY;
+    if(panelY < 8){
+      panelY = 8;
+      my = panelY + panelH + 8;
+    }
     return { entries, mw, mh, mx, my, panelY, panelH, rowH, headerH, totalH, totalScore: entries.reduce((sum,e)=>sum + (e.score||0), 0) };
   }
 
@@ -1450,34 +1463,40 @@
     if(!(online.connected && online.started && onlineIsMode() && state.running && !state.gameOver)) return;
     const t = ot();
     const layout = getOnlineScoreboardLayout();
-    const { entries, mx, mw, panelY, panelH, rowH, headerH, totalScore } = layout;
-    pxRect(mx,panelY,mw,panelH,'rgba(10,10,10,0.74)');
+    const { entries, mx, mw, panelY, panelH, rowH, headerH, totalH, totalScore } = layout;
+    pxRect(mx,panelY,mw,panelH,'rgba(10,10,10,0.78)');
     ctx.strokeStyle='rgba(255,255,255,0.15)';
     ctx.strokeRect(mx,panelY,mw,panelH);
     ctx.font = `${MOBILE_MODE ? 'bold 11px' : 'bold 12px'} Courier New`;
     ctx.textAlign='left';
     ctx.fillStyle='#9cc2ff';
-    ctx.fillText(t.onlineScoreboard, mx + 8, panelY + 14);
-    let y = panelY + headerH;
+    ctx.fillText(t.onlineScoreboard, mx + 8, panelY + 16);
+    const scoreX = mx + mw - 8;
+    let rowTop = panelY + headerH;
     ctx.font = `${MOBILE_MODE ? '11px' : '12px'} Courier New`;
     for(const entry of entries){
       const isSelf = entry.id === (online.clientId || 'self');
+      const textY = rowTop + rowH - 5;
+      if(isSelf) pxRect(mx + 4, rowTop - 1, mw - 8, rowH, 'rgba(255,210,110,0.10)');
       ctx.fillStyle = isSelf ? '#ffd27f' : '#f0e6d8';
-      ctx.fillText(String(entry.name || 'Player').slice(0, MOBILE_MODE ? 10 : 14), mx + 8, y);
-      ctx.textAlign='right';
-      ctx.fillText(String(Math.round(entry.score || 0)), mx + mw - 8, y);
       ctx.textAlign='left';
-      y += rowH;
+      ctx.fillText(String(entry.name || 'Player').slice(0, MOBILE_MODE ? 11 : 15), mx + 8, textY);
+      ctx.textAlign='right';
+      ctx.fillText(String(Math.round(entry.score || 0)), scoreX, textY);
+      rowTop += rowH;
     }
-    ctx.strokeStyle='rgba(255,255,255,0.08)';
+    const dividerY = panelY + panelH - totalH - 4;
+    ctx.strokeStyle='rgba(255,255,255,0.10)';
     ctx.beginPath();
-    ctx.moveTo(mx + 6, panelY + panelH - 24);
-    ctx.lineTo(mx + mw - 6, panelY + panelH - 24);
+    ctx.moveTo(mx + 6, dividerY);
+    ctx.lineTo(mx + mw - 6, dividerY);
     ctx.stroke();
+    const totalY = panelY + panelH - 8;
     ctx.fillStyle='#f0d39c';
-    ctx.fillText(t.onlineTotalScore, mx + 8, panelY + panelH - 8);
+    ctx.textAlign='left';
+    ctx.fillText(t.onlineTotalScore, mx + 8, totalY);
     ctx.textAlign='right';
-    ctx.fillText(String(Math.round(totalScore || 0)), mx + mw - 8, panelY + panelH - 8);
+    ctx.fillText(String(Math.round(totalScore || 0)), scoreX, totalY);
     ctx.textAlign='left';
   }
 

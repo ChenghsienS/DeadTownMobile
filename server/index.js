@@ -802,6 +802,18 @@ function triggerBloaterDeathBurst(room, x, y, ownerId = null, deadId = null) {
 function handleZombieDeath(room, index, ownerId = null) {
   const z = room.match.zombies[index];
   if (!z) return;
+  if (z.type === 'charger' && z.carryingId) {
+    const carried = room.match.playersById.get(z.carryingId);
+    if (carried) {
+      carried.carryingByCharger = null;
+      if ((carried.knockbackTime || 0) <= 0) {
+        carried.knockbackTime = 0;
+        carried.knockbackVX = 0;
+        carried.knockbackVY = 0;
+      }
+    }
+    z.carryingId = null;
+  }
   pushBloodFx(room, z.x, z.y, z.type === 'bloater' || z.type === 'boss' ? 24 : 14, 'rgba(130,18,18,0.95)', z.type === 'boss' ? 1.15 : 1.05);
   pushSoundFx(room, 'gore', z.x, z.y, { ownerId });
   if (z.type === 'boss') spawnBossSerum(room, z.x, z.y);
