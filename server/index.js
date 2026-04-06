@@ -8,6 +8,9 @@ const TICK_RATE = 60;
 const SNAPSHOT_RATE = 60;
 const ROOM_MAX_PLAYERS = 6;
 const ROOM_APPEARANCE_COUNT = 8;
+const REVIVE_RADIUS = 72;
+const REVIVE_TIME = 5;
+const DOWNED_MOVE_SPEED = 60;
 const MAX_ACTIVE_CLIENTS = 60;
 const WORLD = { w: 3600, h: 2400 };
 const ROCKET_JUMP_DURATION = 0.5;
@@ -432,6 +435,10 @@ function createPlayerState(client) {
     flameAmmo: 0,
     moving: false,
     alive: true,
+    downed: false,
+    dead: false,
+    downCount: 0,
+    reviveProgress: 0,
     score: 0,
     kills: 0,
     buffAnnouncement: '',
@@ -601,8 +608,38 @@ function createMatch(room) {
     bossAnnouncement: 0,
     airdropAnnouncement: 0,
     playersById: new Map(),
+    tombstones: [],
   };
 }
+function addTombstone(room, player){
+  if(!room || !room.match || !player) return;
+  room.match.tombstones.push({ id: room.match.nextEntityId++, x: player.x, y: player.y, ownerId: player.id, name: clients.get(player.id)?.name || player.name || 'Player' });
+  if (room.match.tombstones.length > 32) room.match.tombstones.splice(0, room.match.tombstones.length - 32);
+}
+function setPlayerDowned(room, player){
+  if (!player || player.dead) return;
+  player.hp = Math.max(1, Math.round(player.maxHp * 0.25));
+  player.downed = true;
+  player.dead = false;
+  player.alive = true;
+  player.reviveProgress = 0;
+  player.dashTime = 0; player.dashVX = 0; player.dashVY = 0;
+  player.rocketJumpTime = 0; player.rocketJumpVX = 0; player.rocketJumpVY = 0;
+  player.knockbackTime = 0; player.knockbackVX = 0; player.knockbackVY = 0;
+  player.carryingByCharger = null;
+}
+function revivePlayer(room, player){
+  if (!player || player.dead || !player.downed) return;
+  player.downed = false;
+  player.dead = false;
+  player.alive = true;
+  player.hp = Math.max(35, Math.round(player.maxHp * 0.5));
+  player.reviveProgress = 0;
+  player.carryingByCharger = null;
+  player.knockbackTime = 0; player.knockbackVX = 0; player.knockbackVY = 0;
+  pushSoundFx(room, 'pickup', player.x, player.y, { ownerId: player.id });
+}
+
 function startMatch(room) {
   room.started = true;
   room.countdownEndsAt = null;
@@ -670,7 +707,10 @@ function currentPlayers(room) {
   return Array.from(room.match.playersById.values());
 }
 function livingPlayers(room) {
-  return currentPlayers(room).filter((p) => p.alive && p.hp > 0);
+  return currentPlayers(room).filter((p) => p.alive && !p.downed && !p.dead && p.hp > 0);
+}
+function downedPlayers(room) {
+  return currentPlayers(room).filter((p) => p.alive && p.downed && !p.dead);
 }
 function spawnZombie(room) {
   const match = room.match;
@@ -746,17 +786,26 @@ function addScore(player, value) {
   player.kills += 1;
 }
 function damagePlayerServer(room, player, amount) {
-  if (!player || !player.alive || player.hp <= 0) return;
-  const wasAlive = player.alive && player.hp > 0;
+  if (!player || player.dead || !player.alive || player.hp <= 0) return;
+  if (player.downed) return;
+  const wasStanding = !player.downed && !player.dead && player.alive && player.hp > 0;
   player.hp = Math.max(0, player.hp - amount);
   pushBloodFx(room, player.x, player.y, 12, 'rgba(150,24,24,0.95)', 1.1, player.id);
   pushSoundFx(room, 'player_hit', player.x, player.y, { targetId: player.id });
   if (player.hp <= 0) {
-    player.hp = 0;
-    player.alive = false;
-    if (wasAlive) {
-      const clientRef = clients.get(player.id);
-      broadcastToRoom(room, { type: 'player_down', playerId: player.id, name: clientRef?.name || player.name || 'Player' });
+    const clientRef = clients.get(player.id);
+    if ((player.downCount || 0) >= 2) {
+      player.hp = 0;
+      player.alive = false;
+      player.dead = true;
+      player.downed = false;
+      player.reviveProgress = 0;
+      addTombstone(room, player);
+      broadcastToRoom(room, { type: 'player_dead', playerId: player.id, name: clientRef?.name || player.name || 'Player' });
+    } else {
+      player.downCount = (player.downCount || 0) + 1;
+      setPlayerDowned(room, player);
+      if (wasStanding) broadcastToRoom(room, { type: 'player_down', playerId: player.id, name: clientRef?.name || player.name || 'Player' });
     }
   }
 }
@@ -830,13 +879,14 @@ function handleDevCommand(client, payload) {
   if (!room || !room.started || !room.match) return;
   const player = room.match.playersById.get(client.id);
   if (!player) return;
+  if (player.dead) return;
   const command = String(payload.command || '');
   if (command === 'set_weapon') {
     const weapon = String(payload.weapon || '');
     if (['shotgun', 'gatling', 'rocket', 'flamethrower'].includes(weapon)) devSetWeaponLoadout(player, weapon);
     return;
   }
-  if (!player.alive) return;
+  if (!player.alive || player.downed || player.dead) return;
   if (command === 'heal') {
     player.hp = player.maxHp;
     return;
@@ -959,6 +1009,13 @@ function updatePlayerTransientStates(room, dt) {
       player.knockbackVX = 0;
       player.knockbackVY = 0;
     }
+  }
+  const standing = livingPlayers(room);
+  for (const player of downedPlayers(room)) {
+    const revivers = standing.filter((other) => other.id !== player.id && dist(other.x, other.y, player.x, player.y) <= REVIVE_RADIUS);
+    if (revivers.length > 0) player.reviveProgress = Math.min(REVIVE_TIME, (player.reviveProgress || 0) + dt);
+    else player.reviveProgress = 0;
+    if ((player.reviveProgress || 0) >= REVIVE_TIME) revivePlayer(room, player);
   }
 }
 function pushShotFx(room, fx) {
@@ -1598,7 +1655,7 @@ function rayDamage(room, sourcePlayer, angle, range, pelletDamage, maxHits = 1, 
   }
 }
 function handleFireAction(room, sourcePlayer, payload) {
-  if (!sourcePlayer.alive) return;
+  if (!sourcePlayer.alive || sourcePlayer.downed || sourcePlayer.dead) return;
   if (sourcePlayer.shootCooldown > 0 || sourcePlayer.reloadTimer > 0 || sourcePlayer.mag <= 0) return;
   const aimAngle = Number(payload.aimAngle || 0);
   const targetX = clamp(Number(payload.targetX || sourcePlayer.x), 0, WORLD.w);
@@ -1659,7 +1716,7 @@ function handleFireAction(room, sourcePlayer, payload) {
   }
 }
 function handleThrowAction(room, sourcePlayer, payload) {
-  if (!sourcePlayer.alive) return;
+  if (!sourcePlayer.alive || sourcePlayer.downed || sourcePlayer.dead) return;
   const throwable = payload.throwable || payload.type || payload.kindName || 'grenade';
   const kind = throwable === 'molotov' ? 'molotov' : 'grenade';
   const targetX = clamp(Number(payload.targetX || sourcePlayer.x), 10, WORLD.w - 10);
@@ -1677,6 +1734,8 @@ function handleThrowAction(room, sourcePlayer, payload) {
   }
 }
 function handleReloadAction(sourcePlayer) {
+  if (!sourcePlayer || sourcePlayer.downed || sourcePlayer.dead) return;
+
   const reserveKey = reserveKeyForWeapon(sourcePlayer.weapon);
   const hasReserve = sourcePlayer.weapon === 'shotgun' || (reserveKey && sourcePlayer[reserveKey] > 0);
   if (sourcePlayer.reloadTimer > 0 || sourcePlayer.mag === sourcePlayer.magSize || !hasReserve) return;
@@ -1688,6 +1747,7 @@ function handlePlayerAction(client, payload) {
   if (!room || !room.started || !room.match) return;
   const player = room.match.playersById.get(client.id);
   if (!player) return;
+  if (player.dead) return;
   if (payload.kind === 'fire') handleFireAction(room, player, payload);
   else if (payload.kind === 'throw') handleThrowAction(room, player, payload);
   else if (payload.kind === 'reload') handleReloadAction(player);
@@ -1696,7 +1756,7 @@ function updatePlayerFromClient(client, state) {
   const room = rooms.get(client.roomId);
   if (!room || !room.started || !room.match) return;
   const player = room.match.playersById.get(client.id);
-  if (!player || !player.alive) return;
+  if (!player || !player.alive || player.dead) return;
   if (typeof state.name === 'string' && state.name.trim()) client.name = state.name.trim().slice(0, 18);
   const incomingDashTime = Number.isFinite(state.dashTime) ? Math.max(0, Number(state.dashTime) || 0) : 0;
   if (incomingDashTime > 0.12 && (player.dashTime || 0) <= 0.02) pushSoundFx(room, 'dash', player.x, player.y, { ownerId: player.id });
@@ -1754,6 +1814,11 @@ function snapshotForClient(room, client) {
     zombiePushTime: p.zombiePushTime || 0,
     inputSeq: p.id === client.id ? (p.lastInputSeq || 0) : undefined,
     alive: p.alive,
+    downed: !!p.downed,
+    dead: !!p.dead,
+    downCount: p.downCount || 0,
+    reviveProgress: p.reviveProgress || 0,
+    reviveRadius: REVIVE_RADIUS,
     appearanceIndex: Number.isInteger(clients.get(p.id)?.appearanceIndex) ? clients.get(p.id).appearanceIndex : 0,
     buffAnnouncement: p.id === client.id ? p.buffAnnouncement : '',
     buffAnnouncementTimer: p.id === client.id ? p.buffAnnouncementTimer : 0,
@@ -1830,7 +1895,7 @@ function updateRoom(room, dt) {
   }
   updatePlayerTransientStates(room, dt);
   for (const player of currentPlayers(room)) {
-    if (player.alive && player.hp > 0) player.surviveTime = (player.surviveTime || 0) + dt;
+    if (player.alive && !player.downed && !player.dead && player.hp > 0) player.surviveTime = (player.surviveTime || 0) + dt;
     updateReload(player, dt);
   }
   processPendingExplosions(room, dt);

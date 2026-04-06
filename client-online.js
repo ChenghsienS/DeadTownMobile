@@ -172,6 +172,8 @@
     spectating: false,
     spectateTargetId: null,
     selfAlive: true,
+    selfDowned: false,
+    selfDead: false,
     matchSummary: null,
     matchOverMessage: '',
     localStateSeq: 0,
@@ -182,6 +184,10 @@
     reconnectTimer: null,
     reconnectAt: 0,
     reconnectAttempts: 0,
+    tombstones: [],
+    cameraFocusX: null,
+    cameraFocusY: null,
+    spectateSwitchCooldown: 0,
     serverInfo: {
       activeClients: 0,
       queueLength: 0,
@@ -330,7 +336,13 @@
     online.spectating = false;
     online.spectateTargetId = null;
     online.selfAlive = true;
+    online.selfDowned = false;
+    online.selfDead = false;
     online.serverInfo = Object.assign({}, online.serverInfo || {}, { queued: false, queuePosition: 0 });
+    online.tombstones = [];
+    online.cameraFocusX = null;
+    online.cameraFocusY = null;
+    online.spectateSwitchCooldown = 0;
     if(!keepConnection){
       online.connected = false;
       online.connecting = false;
@@ -474,7 +486,14 @@
   }
 
   function onlineAlivePeers(){
-    return Object.values(online.peers).filter(p=>p && p.alive && (p.hp||0) > 0);
+    return Object.values(online.peers).filter(p=>p && p.alive && !p.downed && !p.dead && (p.hp||0) > 0);
+  }
+  function onlineCycleSpectate(dir){
+    const alivePeers = onlineAlivePeers().sort((a,b)=>String(a.name||a.id).localeCompare(String(b.name||b.id)));
+    if(!alivePeers.length) { online.spectateTargetId = null; return; }
+    const currentIndex = alivePeers.findIndex(p=>p.id === online.spectateTargetId);
+    const nextIndex = currentIndex < 0 ? 0 : (currentIndex + dir + alivePeers.length) % alivePeers.length;
+    online.spectateTargetId = alivePeers[nextIndex].id;
   }
 
   function onlinePickSpectateTarget(){
@@ -502,6 +521,8 @@
     if(!online.spectating){
       online.spectateTargetId = null;
       online.selfAlive = true;
+      online.cameraFocusX = null;
+      online.cameraFocusY = null;
       updateCursorVisibility();
       return;
     }
@@ -509,14 +530,20 @@
     mouseDown = false;
     if(typeof touchState === 'object' && touchState) touchState.shootHeld = false;
     onlinePickSpectateTarget();
+    const target = onlineSpectateTarget();
+    online.cameraFocusX = target ? (target.displayX ?? target.x ?? player.x) : player.x;
+    online.cameraFocusY = target ? (target.displayY ?? target.y ?? player.y) : player.y;
     updateCursorVisibility();
   }
 
   function applySelfFromServer(self){
     if(!self) return;
     const prevHp = online.lastServerHp == null ? player.hp : online.lastServerHp;
-    const wasAlive = online.selfAlive !== false;
+    const wasDead = !!online.selfDead;
+    const wasDowned = !!online.selfDowned;
     online.selfAlive = !!self.alive && (self.hp||0) > 0;
+    online.selfDowned = !!self.downed;
+    online.selfDead = !!self.dead || !online.selfAlive;
     const dx = self.x - player.x;
     const dy = self.y - player.y;
     const error = Math.hypot(dx, dy);
@@ -559,6 +586,11 @@
     player.speedMul = self.speedMul ?? player.speedMul;
     player.damageMul = self.damageMul ?? player.damageMul;
     if(Number.isFinite(self.appearanceIndex)) player.onlineAppearanceIndex = self.appearanceIndex;
+    player.downed = !!self.downed;
+    player.dead = !!self.dead;
+    player.downCount = self.downCount || 0;
+    player.reviveProgress = self.reviveProgress || 0;
+    player.reviveRadius = self.reviveRadius || 72;
     player.score = self.score ?? player.score ?? state.score ?? 0;
     player.kills = self.kills ?? player.kills ?? state.kills ?? 0;
     if((self.rocketJumpTime||0) > 0.02 && (player.rocketJumpTime||0) <= 0.02){
@@ -597,13 +629,22 @@
       state.buffAnnouncement = mapBuffAnnouncement(self.buffAnnouncement);
       state.buffAnnouncementTimer = self.buffAnnouncementTimer;
     }
-    if(wasAlive && !online.selfAlive){
-      pushOnlineNotice(lang==='zh' ? '你已倒下，正在观战队友。' : 'You are down. Spectating your teammate.', 'warn', 2600);
-      onlineSetSpectating(true);
-    }else if(!wasAlive && online.selfAlive){
+    if(!wasDowned && online.selfDowned && !online.selfDead){
+      pushOnlineNotice(lang==='zh' ? '你已倒地，等待队友救援。' : 'You are down. Waiting for a revive.', 'warn', 2600);
       onlineSetSpectating(false);
-    online.matchSummary = null;
-    online.matchOverMessage = '';
+    }else if(wasDowned && !online.selfDowned && online.selfAlive){
+      pushOnlineNotice(lang==='zh' ? '你已被救起。' : 'You have been revived.', 'info', 2200);
+      onlineSetSpectating(false);
+      online.matchSummary = null;
+      online.matchOverMessage = '';
+    }
+    if(!wasDead && online.selfDead){
+      pushOnlineNotice(lang==='zh' ? '你已死亡，正在观战队友。' : 'You died. Spectating your teammate.', 'warn', 2600);
+      onlineSetSpectating(true);
+    }else if(wasDead && !online.selfDead && online.selfAlive){
+      onlineSetSpectating(false);
+      online.matchSummary = null;
+      online.matchOverMessage = '';
     }
     online.lastServerHp = self.hp;
   }
@@ -734,6 +775,7 @@
       : [];
     online.syncedShotFx = Array.isArray(match.shotFx) ? match.shotFx.map(fx=>Object.assign({}, fx)) : [];
     online.syncedFlameFx = Array.isArray(match.flameFx) ? match.flameFx.map(fx=>Object.assign({}, fx)) : [];
+    online.tombstones = Array.isArray(match.tombstones) ? match.tombstones.map(t=>Object.assign({}, t)) : [];
     state.damageTexts = Array.isArray(match.damageTexts) ? match.damageTexts.map(t=>Object.assign({}, t)) : [];
     updateHUD();
   }
@@ -848,7 +890,14 @@
     if(msg.type === 'player_down'){
       if(msg.playerId && msg.playerId !== online.clientId){
         const playerLabel = msg.name || (lang==='zh' ? '队友' : 'A teammate');
-        pushOnlineNotice(lang==='zh' ? `${playerLabel} 已倒下。` : `${playerLabel} is down.`, 'warn', 2200);
+        pushOnlineNotice(lang==='zh' ? `${playerLabel} 已倒地。` : `${playerLabel} is down.`, 'warn', 2200);
+      }
+      return;
+    }
+    if(msg.type === 'player_dead'){
+      if(msg.playerId && msg.playerId !== online.clientId){
+        const playerLabel = msg.name || (lang==='zh' ? '队友' : 'A teammate');
+        pushOnlineNotice(lang==='zh' ? `${playerLabel} 已死亡。` : `${playerLabel} died.`, 'warn', 2200);
       }
       return;
     }
@@ -1101,6 +1150,7 @@
 
   function updateOnlineRemoteVisuals(dt){
     const now = performance.now();
+    online.spectateSwitchCooldown = Math.max(0, (online.spectateSwitchCooldown || 0) - dt);
     for(const peer of Object.values(online.peers)){
       peer.dashTime = Math.max(0, (peer.dashTime || 0) - dt);
       peer.rocketJumpTime = Math.max(0, (peer.rocketJumpTime || 0) - dt);
@@ -1368,8 +1418,22 @@
     localReloadPredict(dt);
     player.zombiePushTime = Math.max(0, (player.zombiePushTime || 0) - dt);
 
-    const spectating = online.spectating || !online.selfAlive;
-    if(spectating){
+    const deadSpectating = online.spectating || !!online.selfDead;
+    const downedLocal = !!online.selfDowned && !online.selfDead;
+    if(deadSpectating){
+      onlineSetSpectating(true);
+      onlinePickSpectateTarget();
+      if(online.spectateSwitchCooldown<=0 && (state.keys.has('q') || state.keys.has('arrowleft'))){ onlineCycleSpectate(-1); online.spectateSwitchCooldown = 0.22; }
+      if(online.spectateSwitchCooldown<=0 && (state.keys.has('e') || state.keys.has('arrowright') || state.keys.has('tab'))){ onlineCycleSpectate(1); online.spectateSwitchCooldown = 0.22; }
+      const st = onlineSpectateTarget();
+      if(st){
+        const tx = Number.isFinite(st.displayX) ? st.displayX : (st.x || 0);
+        const ty = Number.isFinite(st.displayY) ? st.displayY : (st.y || 0);
+        if(!Number.isFinite(online.cameraFocusX)) online.cameraFocusX = tx;
+        if(!Number.isFinite(online.cameraFocusY)) online.cameraFocusY = ty;
+        online.cameraFocusX += (tx - online.cameraFocusX) * Math.min(1, dt * 10);
+        online.cameraFocusY += (ty - online.cameraFocusY) * Math.min(1, dt * 10);
+      }
       mouseDown = false;
       state.keys.delete('shift');
       if(typeof touchState === 'object' && touchState) touchState.shootHeld = false;
@@ -1387,7 +1451,7 @@
       if(state.keys.has('d')||state.keys.has('arrowright'))mx+=1;
       const len=Math.hypot(mx,my)||1; mx/=len; my/=len;
     }
-    if(!spectating && !MOBILE_MODE && state.keys.has('shift') && player.dashCooldown<=0 && (mx||my)){
+    if(!deadSpectating && !downedLocal && !MOBILE_MODE && state.keys.has('shift') && player.dashCooldown<=0 && (mx||my)){
       player.dashCooldown=1.3; player.dashTime=0.18;
       const dashSpeed=460;
       player.dashVX=mx*dashSpeed; player.dashVY=my*dashSpeed;
@@ -1405,7 +1469,7 @@
       const aimWorldX=camAim.x+state.mouse.x;
       if(aimWorldX<player.x-2) player.faceDir=-1; else if(aimWorldX>player.x+2) player.faceDir=1;
     }
-    if(spectating){ mx = 0; my = 0; }
+    if(deadSpectating){ mx = 0; my = 0; }
     if(player.rocketJumpTime>0){
       moveWithWallCollision(player,player.rocketJumpVX*dt,player.rocketJumpVY*dt);
       const rocketJumpDamping=Math.pow(ROCKET_JUMP_DAMPING_PER_SECOND,dt);
@@ -1417,10 +1481,11 @@
     }else if(player.dashTime>0){
       moveWithWallCollision(player,player.dashVX*dt,player.dashVY*dt);
     }else{
-      moveWithWallCollision(player,mx*player.speed*(player.speedMul||1)*dt,my*player.speed*(player.speedMul||1)*dt);
+      const moveSpeed = downedLocal ? 60 : player.speed*(player.speedMul||1);
+      moveWithWallCollision(player,mx*moveSpeed*dt,my*moveSpeed*dt);
     }
 
-    if(!spectating && ((MOBILE_MODE&&touchState.shootHeld)||(!MOBILE_MODE&&mouseDown))){
+    if(!deadSpectating && !downedLocal && ((MOBILE_MODE&&touchState.shootHeld)||(!MOBILE_MODE&&mouseDown))){
       if(player.shootCooldown<=0&&player.reloadTimer<=0&&player.mag>0){
         const cam=camera(), worldMouseX=cam.x+state.mouse.x, worldMouseY=cam.y+state.mouse.y;
         const angle=Math.atan2(worldMouseY-player.y,worldMouseX-player.x);
@@ -1442,7 +1507,7 @@
     online.sendTimer -= dt;
     if(online.sendTimer<=0){
       online.sendTimer = 1/60;
-      if(!spectating){
+      if(!deadSpectating){
         onlineSend({
           type:'player_state',
           state:{
@@ -1476,8 +1541,8 @@
       if(target){
         const shakeX = state.cameraShake>0?rand(-state.cameraShake,state.cameraShake):0;
         const shakeY = state.cameraShake>0?rand(-state.cameraShake,state.cameraShake):0;
-        const tx = Number.isFinite(target.displayX) ? target.displayX : (target.x || 0);
-        const ty = Number.isFinite(target.displayY) ? target.displayY : (target.y || 0);
+        const tx = Number.isFinite(online.cameraFocusX) ? online.cameraFocusX : (Number.isFinite(target.displayX) ? target.displayX : (target.x || 0));
+        const ty = Number.isFinite(online.cameraFocusY) ? online.cameraFocusY : (Number.isFinite(target.displayY) ? target.displayY : (target.y || 0));
         return {x:clamp(tx-SW/2+shakeX,0,WORLD.w-SW),y:clamp(ty-SH/2+shakeY,0,WORLD.h-SH)};
       }
     }
@@ -1486,14 +1551,14 @@
 
   const __origDrawCrosshair = drawCrosshair;
   drawCrosshair = function(){
-    if(online.connected && online.started && onlineIsMode() && online.spectating) return;
+    if(online.connected && online.started && onlineIsMode() && (online.spectating || online.selfDowned || online.selfDead)) return;
     return __origDrawCrosshair();
   };
 
   const __origThrowThrowable = throwThrowable;
   throwThrowable = function(kind='grenade'){
     if(!(online.connected && online.started && state.running && onlineIsMode())) return __origThrowThrowable(kind);
-    if(online.spectating || !online.selfAlive) return;
+    if(online.spectating || online.selfDowned || online.selfDead || !online.selfAlive) return;
     const isMolotov=kind==='molotov';
     if(isMolotov&&player.molotovs<=0)return;
     if(!isMolotov&&player.grenades<=0)return;
@@ -1510,7 +1575,7 @@
   const __origStartReload = startReload;
   startReload = function(){
     const before = player.reloadTimer;
-    if(online.connected && online.started && state.running && onlineIsMode() && (online.spectating || !online.selfAlive)) return;
+    if(online.connected && online.started && state.running && onlineIsMode() && (online.spectating || online.selfDowned || online.selfDead || !online.selfAlive)) return;
     __origStartReload();
     if(online.connected && online.started && state.running && onlineIsMode() && player.reloadTimer>0 && before===0){
       onlineSendAction({ kind:'reload' });
@@ -1674,7 +1739,9 @@
   function onlineAppearanceFor(playerId, explicitIndex){ return SURVIVOR_LOOKS[onlineAppearanceIndexFor(playerId, explicitIndex)] || SURVIVOR_LOOKS[0]; }
   function drawSurvivorAccessory(x, y, faceDir, look, alive){ const accent = alive ? look.accent : '#666666'; const detail = alive ? look.detail : '#555555'; switch(look.accessory){ case 'hood': pxRect(x-7,y-10,14,3,accent); pxRect(x-7,y-8,2,4,accent); pxRect(x+5,y-8,2,4,accent); break; case 'bandolier': pxRect(x-5,y+3,2,7,accent); pxRect(x-2,y+2,2,7,detail); pxRect(x+1,y+1,2,7,accent); break; case 'cap': pxRect(x-7,y-10,14,3,accent); if(faceDir>0) pxRect(x+4,y-7,4,2,accent); else pxRect(x-8,y-7,4,2,accent); break; case 'shoulder': if(faceDir>0){ pxRect(x+4,y+1,5,4,accent); pxRect(x+4,y+5,4,2,detail); } else { pxRect(x-9,y+1,5,4,accent); pxRect(x-8,y+5,4,2,detail); } break; case 'mask': pxRect(x-4,y-2,8,3,accent); break; case 'poncho': pxRect(x-7,y+1,14,3,accent); pxRect(x-6,y+4,12,2,detail); break; case 'pack': if(faceDir>0) pxRect(x-8,y+2,3,9,accent); else pxRect(x+5,y+2,3,9,accent); break; case 'beanie': pxRect(x-6,y-10,12,3,accent); pxRect(x-2,y-11,4,2,detail); break; }}
   function drawStyledSurvivorBody(x, y, baseX, baseY, look, opts){ const alive = !!opts.alive; const faceDir = (opts.faceDir||1)<0 ? -1 : 1; const weapon = opts.weapon || 'shotgun'; const weaponAng = Number.isFinite(opts.weaponAng) ? opts.weaponAng : (faceDir<0?Math.PI:0); const jumpVisual = opts.jumpVisual || { lift:0, shadowScale:1 }; const bodyColor = alive ? look.coat : '#545454'; const legsColor = alive ? look.legs : '#3c3c3c'; const faceColor = alive ? (opts.hurt ? look.hurt : look.face) : '#9a9a9a'; const hairColor = alive ? look.hair : '#666666'; const ember = alive ? '#ff7a1a' : '#8b8b8b'; const muzzleWood = alive ? look.detail : '#666666'; const gunBody = weapon==='gatling' ? '#545f66' : weapon==='rocket' ? '#5a646f' : weapon==='flamethrower' ? '#7a7a7a' : (look.gunBody || '#7d614f'); const gunTrim = look.gunTrim || '#2c2c2c'; pxRect(baseX-11*(jumpVisual.shadowScale||1),baseY+12,22*(jumpVisual.shadowScale||1),5,'rgba(0,0,0,0.2)'); if(opts.spinMode){ const spin = opts.spin || 0; ctx.save(); ctx.translate(x,y+3); ctx.rotate(spin); pxRect(-7,-6,14,5,hairColor); pxRect(-8,-3,16,7,faceColor); pxRect(6,-1,6,2,muzzleWood); pxRect(11,-1,2,2,ember); pxRect(-8,4,16,8,bodyColor); pxRect(-10,2,3,10,legsColor); pxRect(7,2,3,10,legsColor); if(look.accessory==='bandolier'){ pxRect(-5,4,2,7,alive?look.accent:'#666'); pxRect(-1,3,2,7,alive?look.detail:'#555'); pxRect(3,2,2,7,alive?look.accent:'#666'); } else if(look.accessory==='poncho'){ pxRect(-8,3,16,3,alive?look.accent:'#666'); } else if(look.accessory==='hood'){ pxRect(-8,-6,16,2,alive?look.accent:'#666'); } drawRotatedGun(0,4,spin,gunBody,gunTrim,weapon); ctx.restore(); return; } pxRect(x-6,y-8,12,10,faceColor); pxRect(x-6,y-10,12,3,hairColor); pxRect(x-5,y-6,10,3,'#0a0a0a'); drawSurvivorAccessory(x, y, faceDir, look, alive); if(faceDir>0){ pxRect(x+5,y-3,5,2,muzzleWood); pxRect(x+10,y-3,2,2,ember); } else { pxRect(x-10,y-3,5,2,muzzleWood); pxRect(x-12,y-3,2,2,ember); } pxRect(x-5,y+2,10,9,bodyColor); pxRect(x-7,y+10,4,6,legsColor); pxRect(x+3,y+10,4,6,legsColor); if(alive) drawRotatedGun(x,y+4,weaponAng,gunBody,gunTrim,weapon); }
-  function drawStyledLocalPlayer(cam){ const look = onlineAppearanceFor(online.clientId || state.playerName, player.onlineAppearanceIndex); const s=worldToScreen(player.x,player.y,cam),baseX=px(s.x),baseY=px(s.y); const jumpVisual=getPlayerJumpVisual(),lift=jumpVisual.lift; const x=baseX,y=px(baseY-lift); if(state.deathAnim>0){ const collapse=(1.4-state.deathAnim)/1.4; pxRect(baseX-8,baseY-2+collapse*10,16,4,'#7b1b1b'); pxRect(baseX-4,baseY+2+collapse*10,8,6,look.coat); return; } const worldMouseX=cam.x+state.mouse.x,worldMouseY=cam.y+state.mouse.y; const aimAng=Math.atan2(worldMouseY-player.y,worldMouseX-player.x); const mobileAimActive = MOBILE_MODE && touchState.aim.active && Math.hypot(touchState.aim.dx,touchState.aim.dy)>12; let weaponAng=aimAng; if(MOBILE_MODE && !mobileAimActive){ if(player.dashTime>0) weaponAng=player.dashFacing; else if(player.rocketJumpTime>0) weaponAng=Math.atan2(player.rocketJumpVY||0,player.rocketJumpVX||player.faceDir||1); else if(player.knockbackTime>0) weaponAng=Math.atan2(player.knockbackVY||0,player.knockbackVX||player.faceDir||1); else if(Math.hypot(touchState.move.dx,touchState.move.dy)>6) weaponAng=Math.atan2(touchState.move.dy,touchState.move.dx); else weaponAng=(player.faceDir||1)<0?Math.PI:0; } const moveAng=player.dashTime>0?player.dashFacing:player.rocketJumpTime>0?Math.atan2(player.rocketJumpVY||0,player.rocketJumpVX||1):weaponAng; if(player.dashTime>0||player.rocketJumpTime>0){ for(let i=3;i>=1;i--){ const trailX=x-Math.cos(moveAng)*i*7,trailY=y-Math.sin(moveAng)*i*7; ctx.fillStyle=`rgba(255,190,120,${0.09*i})`; ctx.fillRect(px(trailX-7),px(trailY-7),14,18); } } ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.font='12px Courier New'; ctx.textAlign='center'; ctx.fillText(state.playerName,x+1,y-15); ctx.fillStyle='#f0e6d8'; ctx.fillText(state.playerName,x,y-16); if(player.dashTime>0||player.rocketJumpTime>0){ const spinBase=player.dashTime>0?1-(player.dashTime/0.18):1-(player.rocketJumpTime/ROCKET_JUMP_DURATION); const spin=spinBase*Math.PI*2*player.dashSpinDir; drawStyledSurvivorBody(x,y,baseX,baseY,look,{alive:true,hurt:player.hurtTimer>0,faceDir:player.faceDir,weapon:player.weapon,weaponAng,spinMode:true,spin,jumpVisual}); return; } drawStyledSurvivorBody(x,y,baseX,baseY,look,{alive:true,hurt:player.hurtTimer>0,faceDir:player.faceDir,weapon:player.weapon,weaponAng,jumpVisual}); }
+  function drawDownedSurvivorBody(x,y,baseX,baseY,look,faceDir,name,progress){ pxRect(baseX-10,baseY+12,20,5,'rgba(0,0,0,0.18)'); pxRect(x-11,y+5,18,7,look.coat); pxRect(x-1,y+2,10,5,look.legs); pxRect(x-10,y+1,9,6,look.face); pxRect(x-10,y-1,10,2,look.hair); pxRect(x-12,y+5,3,6,look.detail); ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.font='12px Courier New'; ctx.textAlign='center'; ctx.fillText(String(name||'Player'),x+1,y-15); ctx.fillStyle='#f0d39c'; ctx.fillText(String(name||'Player'),x,y-16); const barW=28; pxRect(x-barW/2,y-28,barW,4,'rgba(255,255,255,0.12)'); pxRect(x-barW/2,y-28,barW*Math.max(0,Math.min(1,progress||0)),4,'#f0d39c'); }
+  function drawTombstoneAt(t, cam){ const s=worldToScreen(t.x||0,t.y||0,cam),x=px(s.x),y=px(s.y); pxRect(x-6,y-14,12,12,'#77716a'); pxRect(x-5,y-13,10,10,'#8c867d'); pxRect(x-2,y-2,4,10,'#5b5146'); ctx.fillStyle='rgba(0,0,0,0.18)'; ctx.fillRect(x-10,y+8,20,4); }
+  function drawStyledLocalPlayer(cam){ const look = onlineAppearanceFor(online.clientId || state.playerName, player.onlineAppearanceIndex); const s=worldToScreen(player.x,player.y,cam),baseX=px(s.x),baseY=px(s.y); const jumpVisual=getPlayerJumpVisual(),lift=jumpVisual.lift; const x=baseX,y=px(baseY-lift); if(player.dead){ return; } if(player.downed){ drawDownedSurvivorBody(x,y,baseX,baseY,look,player.faceDir,state.playerName,(player.reviveProgress||0)/5); return; } if(state.deathAnim>0){ const collapse=(1.4-state.deathAnim)/1.4; pxRect(baseX-8,baseY-2+collapse*10,16,4,'#7b1b1b'); pxRect(baseX-4,baseY+2+collapse*10,8,6,look.coat); return; } const worldMouseX=cam.x+state.mouse.x,worldMouseY=cam.y+state.mouse.y; const aimAng=Math.atan2(worldMouseY-player.y,worldMouseX-player.x); const mobileAimActive = MOBILE_MODE && touchState.aim.active && Math.hypot(touchState.aim.dx,touchState.aim.dy)>12; let weaponAng=aimAng; if(MOBILE_MODE && !mobileAimActive){ if(player.dashTime>0) weaponAng=player.dashFacing; else if(player.rocketJumpTime>0) weaponAng=Math.atan2(player.rocketJumpVY||0,player.rocketJumpVX||player.faceDir||1); else if(player.knockbackTime>0) weaponAng=Math.atan2(player.knockbackVY||0,player.knockbackVX||player.faceDir||1); else if(Math.hypot(touchState.move.dx,touchState.move.dy)>6) weaponAng=Math.atan2(touchState.move.dy,touchState.move.dx); else weaponAng=(player.faceDir||1)<0?Math.PI:0; } const moveAng=player.dashTime>0?player.dashFacing:player.rocketJumpTime>0?Math.atan2(player.rocketJumpVY||0,player.rocketJumpVX||1):weaponAng; if(player.dashTime>0||player.rocketJumpTime>0){ for(let i=3;i>=1;i--){ const trailX=x-Math.cos(moveAng)*i*7,trailY=y-Math.sin(moveAng)*i*7; ctx.fillStyle=`rgba(255,190,120,${0.09*i})`; ctx.fillRect(px(trailX-7),px(trailY-7),14,18); } } ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.font='12px Courier New'; ctx.textAlign='center'; ctx.fillText(state.playerName,x+1,y-15); ctx.fillStyle='#f0e6d8'; ctx.fillText(state.playerName,x,y-16); if(player.dashTime>0||player.rocketJumpTime>0){ const spinBase=player.dashTime>0?1-(player.dashTime/0.18):1-(player.rocketJumpTime/ROCKET_JUMP_DURATION); const spin=spinBase*Math.PI*2*player.dashSpinDir; drawStyledSurvivorBody(x,y,baseX,baseY,look,{alive:true,hurt:player.hurtTimer>0,faceDir:player.faceDir,weapon:player.weapon,weaponAng,spinMode:true,spin,jumpVisual}); return; } drawStyledSurvivorBody(x,y,baseX,baseY,look,{alive:true,hurt:player.hurtTimer>0,faceDir:player.faceDir,weapon:player.weapon,weaponAng,jumpVisual}); }
 
   const __origDrawPlayer = drawPlayer;
   drawPlayer = function(cam){
@@ -1699,6 +1766,9 @@
       flameParticles: state.flameParticles.concat(temp.flameParticles),
       particles: state.particles.concat(temp.particles),
     }, ()=>__origRender());
+    const cam = camera();
+    for(const tomb of (online.tombstones||[])) drawTombstoneAt(tomb, cam);
+    drawOnlineReviveMarkers(cam);
     drawOnlineScoreboardPanel();
     ctx.textAlign='left';
     ctx.font='bold 12px Courier New';
@@ -1710,7 +1780,7 @@
     ctx.fillText(`${ot().peers}: ${Object.keys(online.peers).length}`, 20, SH-24);
     if(online.spectating){
       const target = onlineSpectateTarget();
-      const label = target ? `${lang==='zh' ? '正在观战' : 'SPECTATING'}: ${target.name || 'Player'}` : (lang==='zh' ? '你已倒下，等待队友。' : 'You are down. Waiting on your teammate.');
+      const label = target ? `${lang==='zh' ? '正在观战' : 'SPECTATING'}: ${target.name || 'Player'}` : (lang==='zh' ? '你已死亡，等待队友。' : 'You are dead. Waiting on your teammate.');
       ctx.textAlign='center';
       ctx.font='bold 18px Courier New';
       ctx.fillStyle='rgba(0,0,0,0.55)';
@@ -1727,14 +1797,31 @@
     return {lift:arc*48, shadowScale:0.86-arc*0.22, shadowAlpha:0.2};
   }
 
+
+  function drawOnlineReviveMarkers(cam){
+    const all = [];
+    if(player.downed && !player.dead) all.push({x:player.x,y:player.y,progress:(player.reviveProgress||0)/5,radius:player.reviveRadius||72,self:true});
+    for(const peer of Object.values(online.peers)) if(peer && peer.downed && !peer.dead) all.push({x:peer.displayX??peer.x,y:peer.displayY??peer.y,progress:(peer.reviveProgress||0)/5,radius:peer.reviveRadius||72,self:false});
+    ctx.save();
+    for(const item of all){
+      const s = worldToScreen(item.x||0,item.y||0,cam); const x=px(s.x), y=px(s.y);
+      ctx.strokeStyle='rgba(240,211,156,0.35)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(x,y+6,item.radius,0,Math.PI*2); ctx.stroke();
+      const barW=42, barY=y-34;
+      ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(x-barW/2,barY,barW,6);
+      ctx.fillStyle='#f0d39c'; ctx.fillRect(x-barW/2,barY,barW*Math.max(0,Math.min(1,item.progress||0)),6);
+    }
+    ctx.restore();
+  }
+
   function drawRemotePlayer(peer, cam){
     const worldX = Number.isFinite(peer.displayX) ? peer.displayX : (peer.x || 0);
     const worldY = Number.isFinite(peer.displayY) ? peer.displayY : (peer.y || 0);
     const baseS = worldToScreen(worldX, worldY, cam),baseX=px(baseS.x),baseY=px(baseS.y);
     const jumpVisual=getRemoteJumpVisual(peer),lift=jumpVisual.lift;
     const x=baseX,y=px(baseY-lift);
-    const alive = !!peer.alive && (peer.hp||0) > 0;
+    const alive = !!peer.alive && !peer.downed && !peer.dead && (peer.hp||0) > 0;
     const look = onlineAppearanceFor(peer.id || peer.name, peer.appearanceIndex);
+    if(peer.dead){ return; }
     const worldMouseAngle = Number.isFinite(peer.aimAngle) ? peer.aimAngle : (((peer.faceDir||1)<0)?Math.PI:0);
     let weaponAng = worldMouseAngle;
     const faceDir=(peer.faceDir||1)<0?-1:1;
@@ -1743,6 +1830,7 @@
     else if((peer.rocketJumpTime||0)>0) weaponAng = Math.atan2(peer.rocketJumpVY||0,peer.rocketJumpVX||peer.faceDir||1);
     else if((peer.knockbackTime||0)>0) weaponAng = Math.atan2(peer.knockbackVY||0,peer.knockbackVX||peer.faceDir||1);
     else weaponAng = (peer.faceDir||1)<0?Math.PI:worldMouseAngle;
+    if(peer.downed){ drawDownedSurvivorBody(x,y,baseX,baseY,look,faceDir,peer.name,(peer.reviveProgress||0)/5); return; }
     ctx.fillStyle='rgba(0,0,0,0.65)';
     ctx.font='12px Courier New';
     ctx.textAlign='center';
