@@ -108,9 +108,6 @@ function serverStatusPayload(extra = {}) {
     status: getServerLoadStatus(),
   }, extra);
 }
-function safeSendServerStatus(client, extra = {}) {
-  safeSend(client?.ws, { type: 'server_status', server: serverStatusPayload(extra) });
-}
 function broadcastServerStatus() {
   const payload = { type: 'server_status', server: serverStatusPayload() };
   for (const client of clients.values()) safeSend(client.ws, payload);
