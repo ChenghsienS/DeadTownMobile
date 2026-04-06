@@ -2,7 +2,8 @@
   const sameOriginWs = (location.host && !/github\.io$/i.test(location.hostname))
     ? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`
     : '';
-  const ONLINE_DEFAULT_WS = localStorage.getItem('deadtown_online_server_url') || sameOriginWs;
+  const ONLINE_FALLBACK_WS = 'wss://api.deadtown-by-cedrrriiiccc.online';
+  const ONLINE_DEFAULT_WS = localStorage.getItem('deadtown_online_server_url') || sameOriginWs || ONLINE_FALLBACK_WS;
   const ONLINE_T = {
     en: {
       onlineBtn: 'Online Co-op',
@@ -38,7 +39,6 @@
       onlineNoLeaderboard: 'Online co-op matches do not submit leaderboard scores.',
       onlineRoomCreated: 'Room created.',
       onlineNeedName: 'Set your player name first.',
-      onlineNeedServer: 'Enter the WebSocket server URL first.',
       onlineJoined: 'Joined room.',
       onlineDisconnected: 'Disconnected from online server.',
       onlineRoomNameFallback: 'DeadTown Room',
@@ -46,8 +46,10 @@
       onlineStateStarted: 'Started',
       onlineStateWaiting: 'Lobby',
       onlinePlayersLabel: 'Room Players',
-      onlineConnectHelp: 'For local testing use ws://localhost:8080. For deployed HTTPS sites use wss://.',
-      onlineServerPlaceholder: 'ws://localhost:8080',
+      onlineAutoServer: 'Server',
+      onlineAutoConnect: 'Auto-connect enabled',
+      onlineReconnectNow: 'Retrying connection...',
+      onlineReconnectIn: 'Reconnecting in',
       onlineStartInfo: 'Starting synchronized online match...',
       onlineMatchEnded: 'Match ended.',
       onlineScoreboard: 'SCORES',
@@ -98,7 +100,6 @@
       onlineNoLeaderboard: '在线合作模式不会上传排行榜成绩。',
       onlineRoomCreated: '房间已创建。',
       onlineNeedName: '请先设置玩家名字。',
-      onlineNeedServer: '请先输入 WebSocket 服务器地址。',
       onlineJoined: '已加入房间。',
       onlineDisconnected: '已断开在线服务器。',
       onlineRoomNameFallback: 'DeadTown 房间',
@@ -106,8 +107,10 @@
       onlineStateStarted: '已开始',
       onlineStateWaiting: '大厅中',
       onlinePlayersLabel: '房间玩家',
-      onlineConnectHelp: '本地测试用 ws://localhost:8080。部署到 HTTPS 网站时请使用 wss://。',
-      onlineServerPlaceholder: 'ws://localhost:8080',
+      onlineAutoServer: '服务器',
+      onlineAutoConnect: '已启用自动连接',
+      onlineReconnectNow: '正在重试连接...',
+      onlineReconnectIn: '将在此时间后重连',
       onlineStartInfo: '正在进入联机同步对局...',
       onlineMatchEnded: '对局已结束。',
       onlineScoreboard: '局内分数',
@@ -157,9 +160,11 @@
     selfAlive: true,
     matchSummary: null,
     matchOverMessage: '',
-    localStateSeq: 0,
-    lastAckInputSeq: 0,
-    matchStartAt: 0,
+    desiredConnected: false,
+    manualDisconnect: false,
+    reconnectTimer: null,
+    reconnectAt: 0,
+    reconnectAttempts: 0,
   };
   window.deadtownOnline = online;
 
@@ -173,6 +178,40 @@
     return t.statusIdle;
   }
   function onlinePersistUrl(v){ online.serverUrl = String(v || '').trim(); localStorage.setItem('deadtown_online_server_url', online.serverUrl); }
+
+  function onlineClearReconnectTimer(){
+    if(online.reconnectTimer){
+      clearTimeout(online.reconnectTimer);
+      online.reconnectTimer = null;
+    }
+    online.reconnectAt = 0;
+  }
+
+  function onlineReconnectSeconds(){
+    if(!online.reconnectAt) return 0;
+    return Math.max(0, Math.ceil((online.reconnectAt - Date.now()) / 1000));
+  }
+
+  function onlineAutoStatusText(){
+    const t = ot();
+    const retryIn = onlineReconnectSeconds();
+    if(online.connected) return `${t.statusConnected}`;
+    if(online.connecting) return `${t.statusConnecting}`;
+    if(retryIn > 0) return `${t.onlineReconnectIn} ${retryIn}s`;
+    if(online.state === 'error' && online.desiredConnected) return t.onlineReconnectNow;
+    return t.statusIdle;
+  }
+
+  function onlineScheduleReconnect(delayMs){
+    if(online.reconnectTimer || online.connected || online.connecting) return;
+    if(!online.desiredConnected || !online.serverUrl) return;
+    online.reconnectAt = Date.now() + delayMs;
+    online.reconnectTimer = setTimeout(()=>{
+      online.reconnectTimer = null;
+      online.reconnectAt = 0;
+      if(online.desiredConnected) onlineConnect();
+    }, delayMs);
+  }
   function onlineSend(data){ if(online.ws && online.ws.readyState === 1) online.ws.send(JSON.stringify(data)); }
   function onlineSendAction(action){ if(online.connected && online.started) onlineSend({ type:'player_action', action }); }
   function onlineSendDevCommand(command, extra={}){
@@ -236,9 +275,6 @@
     online.lastSnapshotAt = 0;
     online.pendingSnapshot = null;
     online.lastServerHp = null;
-    online.localStateSeq = 0;
-    online.lastAckInputSeq = 0;
-    online.matchStartAt = 0;
     online.syncedProjectiles = [];
     online.syncedShotFx = [];
     online.syncedFlameFx = [];
@@ -248,15 +284,24 @@
     online.spectating = false;
     online.spectateTargetId = null;
     online.selfAlive = true;
+    online.matchSummary = null;
+    online.matchOverMessage = '';
     if(!keepConnection){
       online.connected = false;
       online.connecting = false;
       online.clientId = null;
       online.state = 'idle';
+      online.desiredConnected = false;
+      online.manualDisconnect = false;
+      online.reconnectAttempts = 0;
+      onlineClearReconnectTimer();
     }
   }
 
-  function onlineDisconnect(silent=false){
+  function onlineDisconnect(silent=false, manual=true){
+    online.manualDisconnect = manual;
+    online.desiredConnected = manual ? false : online.desiredConnected;
+    onlineClearReconnectTimer();
     if(online.ws){
       try{ online.ws.onclose = null; online.ws.close(); }catch(err){}
       online.ws = null;
@@ -271,10 +316,13 @@
   function onlineConnect(){
     if(online.connected || online.connecting) return;
     if(!state.playerName){ pushOnlineNotice(ot().onlineNeedName, 'warn'); return; }
-    if(!online.serverUrl){ pushOnlineNotice(ot().onlineNeedServer, 'warn'); return; }
+    if(!online.serverUrl){ online.serverUrl = ONLINE_FALLBACK_WS; onlinePersistUrl(online.serverUrl); }
+    online.desiredConnected = true;
+    online.manualDisconnect = false;
+    onlineClearReconnectTimer();
     online.connecting = true;
     online.state = 'connecting';
-    renderOnlineLobby();
+    if(state.overlayScreen === 'online-lobby') renderOnlineLobby();
     try{
       const ws = new WebSocket(online.serverUrl);
       online.ws = ws;
@@ -282,27 +330,35 @@
         online.connecting = false;
         online.connected = true;
         online.state = 'connected';
+        online.reconnectAttempts = 0;
+        onlineClearReconnectTimer();
         onlineSend({ type:'hello', name:state.playerName, version:'dt-online-p0', lang });
         onlineSend({ type:'list_rooms' });
-        renderOnlineLobby();
+        if(state.overlayScreen === 'online-lobby') renderOnlineLobby();
       };
       ws.onmessage = (ev)=>{
         let msg = null;
         try{ msg = JSON.parse(ev.data); }catch(err){ return; }
         handleOnlineMessage(msg);
       };
-      ws.onerror = ()=>{ online.state = 'error'; renderOnlineLobby(); };
+      ws.onerror = ()=>{
+        online.state = 'error';
+        if(state.overlayScreen === 'online-lobby') renderOnlineLobby();
+      };
       ws.onclose = ()=>{
         const wasOnlineMatch = state.running && !state.gameOver && onlineIsMode();
         const wasInMenu = !state.running || state.gameOver || state.overlayScreen==='online-lobby' || state.overlayScreen==='online-room' || state.overlayScreen==='online-summary';
         onlineResetState(true);
         online.connected = false;
         online.connecting = false;
-        online.state = 'idle';
+        online.state = online.desiredConnected ? 'error' : 'idle';
         if(wasOnlineMatch){
           pushOnlineNotice(ot().onlineDisconnected, 'error');
           goToMainMenu();
-          return;
+        }
+        if(online.desiredConnected && !online.manualDisconnect){
+          online.reconnectAttempts = (online.reconnectAttempts || 0) + 1;
+          onlineScheduleReconnect(Math.min(8000, 1000 + (online.reconnectAttempts - 1) * 1500));
         }
         if(wasInMenu && !state.running) renderOnlineLobby();
       };
@@ -310,7 +366,9 @@
       online.connecting = false;
       online.connected = false;
       online.state = 'error';
-      renderOnlineLobby();
+      online.reconnectAttempts = (online.reconnectAttempts || 0) + 1;
+      onlineScheduleReconnect(Math.min(8000, 1000 + (online.reconnectAttempts - 1) * 1500));
+      if(state.overlayScreen === 'online-lobby') renderOnlineLobby();
     }
   }
 
@@ -426,25 +484,20 @@
     const carriedByCharger = !!self.carryingByCharger;
     const serverZombiePush = (self.zombiePushTime||0) > 0.02;
     const inBurstMove = (player.dashTime||0) > 0 || (player.rocketJumpTime||0) > 0 || (player.knockbackTime||0) > 0;
-    const ackSeq = Number(self.inputSeq || 0);
-    if(ackSeq > online.lastAckInputSeq) online.lastAckInputSeq = ackSeq;
-    const pendingInputs = Math.max(0, (online.localStateSeq || 0) - (online.lastAckInputSeq || 0));
-    const startupGrace = online.matchStartAt > 0 && (performance.now() - online.matchStartAt) < 700;
-    const staleSnapshot = pendingInputs > 2;
-    if(!state.running || error > 120 || carriedByCharger || serverKnockback){
+    if(!state.running || error > 96 || carriedByCharger || serverKnockback){
       player.x = self.x;
       player.y = self.y;
     }else if(serverZombiePush){
-      if(error > 72){
+      if(error > 64){
         player.x = self.x;
         player.y = self.y;
-      }else if(error > 8){
-        player.x += dx * 0.22;
-        player.y += dy * 0.22;
+      }else if(error > 4){
+        player.x += dx * 0.38;
+        player.y += dy * 0.38;
       }
-    }else if(!(startupGrace || staleSnapshot) && !inBurstMove && error > 18){
-      player.x += dx * 0.10;
-      player.y += dy * 0.10;
+    }else if(!inBurstMove && error > 14){
+      player.x += dx * 0.18;
+      player.y += dy * 0.18;
     }
     player.zombiePushTime = Math.max(player.zombiePushTime||0, self.zombiePushTime||0);
     player.hp = self.hp;
@@ -677,9 +730,6 @@
       online.gameMode = 'online';
       onlineSetSpectating(false);
       online.worldSeed = Number.isInteger(msg.worldSeed) ? msg.worldSeed : 12345;
-      online.localStateSeq = 0;
-      online.lastAckInputSeq = 0;
-      online.matchStartAt = performance.now();
       pushOnlineNotice(ot().onlineStartInfo, 'info');
       resetGame();
       state.pellets = [];
@@ -773,27 +823,40 @@
   function renderOnlineLobby(){
     state.overlayScreen = 'online-lobby';
     const t = ot();
+    online.desiredConnected = true;
+    online.manualDisconnect = false;
+    if(!online.serverUrl){
+      online.serverUrl = ONLINE_FALLBACK_WS;
+      onlinePersistUrl(online.serverUrl);
+    }
+    if(!online.connected && !online.connecting && !online.reconnectTimer){
+      setTimeout(()=>{ if(state.overlayScreen === 'online-lobby' && online.desiredConnected) onlineConnect(); }, 0);
+    }
     $('overlayCard').className = 'card';
     const roomsMarkup = online.rooms.length ? online.rooms.map(room=>{
-      const disabled = room.started || room.playerCount>=room.maxPlayers;
+      const disabled = !online.connected || online.connecting || room.started || room.playerCount>=room.maxPlayers;
       const joinLabel = room.started ? t.inGame : (room.playerCount>=room.maxPlayers ? 'Full' : t.join);
       return `<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);margin-top:8px;"><div><div class="accent" style="font-size:16px;">${escapeHtml(room.roomName)}</div><div style="opacity:0.75;font-size:13px;">${t.onlineRoomOwner}: ${escapeHtml(room.hostName)} · ${t.players}: ${room.playerCount}/${room.maxPlayers} · ${room.started?t.onlineStateStarted:t.onlineStateWaiting}</div></div><div><button data-join-room="${escapeHtml(room.roomId)}" ${disabled?'disabled':''}>${joinLabel}</button></div></div>`;
-    }).join('') : `<p style="opacity:0.72;">${t.noRooms}</p>`;
+    }).join('') : `<p style="opacity:0.72;">${online.connected ? t.noRooms : t.onlineReconnectNow}</p>`;
     $('overlayCard').innerHTML = `
       <h2>${t.onlineTitle}</h2>
       <p>${t.onlineDesc}</p>
       <p class="compactNote"><span class="accent">${t.onlineNoLeaderboard}</span></p>
       <div style="text-align:left;margin:14px 0;padding:12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);">
-        <label style="display:block;opacity:0.75;margin-bottom:6px;">${t.serverUrl}</label>
-        <input id="onlineServerInput" value="${escapeHtml(online.serverUrl)}" placeholder="${escapeHtml(t.onlineServerPlaceholder)}" style="width:100%;padding:10px 12px;background:#141111;border:1px solid rgba(255,255,255,0.14);color:#f0e6d8;font:inherit;">
-        <p style="opacity:0.6;font-size:12px;margin:8px 0 0;">${t.onlineConnectHelp}</p>
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+          <div>
+            <div style="opacity:0.68;font-size:12px;margin-bottom:4px;">${t.onlineAutoServer}</div>
+            <div class="accent" style="font-size:15px;word-break:break-all;">${escapeHtml(online.serverUrl)}</div>
+            <div style="opacity:0.68;font-size:12px;margin-top:6px;">${t.onlineAutoConnect}</div>
+          </div>
+          <div style="text-align:right;min-width:180px;">
+            <div style="opacity:0.78;font-size:14px;">${onlineAutoStatusText()}</div>
+          </div>
+        </div>
         <div class="controls" style="justify-content:center;flex-wrap:wrap;margin-top:12px;">
-          <button id="onlineConnectBtn" ${online.connected||online.connecting?'disabled':''}>${t.connect}</button>
-          <button id="onlineDisconnectBtn" ${!online.connected&&!online.connecting?'disabled':''}>${t.disconnect}</button>
           <button id="onlineRefreshBtn" ${!online.connected?'disabled':''}>${t.refresh}</button>
           <button id="onlineBackBtn">${t.back}</button>
         </div>
-        <p style="opacity:0.78;margin:10px 0 0;">${onlineStatusText()}</p>
       </div>
       <div style="text-align:left;margin:14px 0;padding:12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);">
         <label style="display:block;opacity:0.75;margin-bottom:6px;">${t.roomName}</label>
@@ -802,15 +865,17 @@
           <button id="onlineCreateBtn" ${!online.connected?'disabled':''}>${t.createRoom}</button>
         </div>
       </div>
-      <div style="text-align:left;">${roomsMarkup}</div>
+      <div style="text-align:left;margin-top:14px;">
+        <div style="opacity:0.78;margin-bottom:8px;">${t.rooms}</div>
+        <div style="max-height:320px;overflow-y:auto;padding-right:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.025);">
+          <div style="padding:10px 12px;">${roomsMarkup}</div>
+        </div>
+      </div>
     `;
     $('overlay').classList.remove('hidden');
     setTimeout(()=>{
-      const input = $('onlineServerInput'); if(input) input.onchange = ()=>onlinePersistUrl(input.value);
-      const c = $('onlineConnectBtn'); if(c) c.onclick = ()=>{ onlinePersistUrl(($('onlineServerInput')?.value)||''); onlineConnect(); };
-      const d = $('onlineDisconnectBtn'); if(d) d.onclick = ()=>{ onlineDisconnect(true); renderOnlineLobby(); };
       const r = $('onlineRefreshBtn'); if(r) r.onclick = ()=>refreshOnlineRooms();
-      const back = $('onlineBackBtn'); if(back) back.onclick = ()=>{ state.menuScreen='main'; online.gameMode='single'; applyLang(); };
+      const back = $('onlineBackBtn'); if(back) back.onclick = ()=>{ onlineDisconnect(true, true); state.menuScreen='main'; online.gameMode='single'; applyLang(); };
       const create = $('onlineCreateBtn'); if(create) create.onclick = ()=>createOnlineRoom();
       document.querySelectorAll('[data-join-room]').forEach(btn=>btn.onclick = ()=>joinOnlineRoom(btn.getAttribute('data-join-room')));
     },0);
@@ -901,6 +966,10 @@
   setInterval(()=>{
     if(state.overlayScreen === 'online-room' && online.roomState && online.roomState.countdownEndsAt && !online.roomState.started){
       renderOnlineRoom();
+      return;
+    }
+    if(state.overlayScreen === 'online-lobby' && (!online.connected || online.connecting || online.reconnectAt)){
+      renderOnlineLobby();
     }
   }, 250);
 
