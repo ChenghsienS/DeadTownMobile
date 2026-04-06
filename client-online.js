@@ -47,14 +47,8 @@
       onlineStateStarted: 'Started',
       onlineStateWaiting: 'Lobby',
       onlinePlayersLabel: 'Room Players',
-      onlineConnection: 'Server Connection',
-      onlineServerStatus: 'Server Status',
-      onlineStatusIdle: 'Idle',
-      onlineStatusBusy: 'Busy',
-      onlineStatusFull: 'Full',
-      onlineQueueLabel: 'Queue',
-      onlineQueuedAt: 'Waiting in queue',
-      onlineQueuedSuffix: 'players ahead',
+      onlineAutoServer: 'Server',
+      onlineAutoConnect: 'Auto-connect enabled',
       onlineReconnectNow: 'Retrying connection...',
       onlineReconnectIn: 'Reconnecting in',
       onlineStartInfo: 'Starting synchronized online match...',
@@ -102,14 +96,8 @@
       onlineStateStarted: '已开始',
       onlineStateWaiting: '大厅中',
       onlinePlayersLabel: '房间玩家',
-      onlineConnection: '服务器连接',
-      onlineServerStatus: '服务器状态',
-      onlineStatusIdle: '空闲',
-      onlineStatusBusy: '繁忙',
-      onlineStatusFull: '爆满',
-      onlineQueueLabel: '排队',
-      onlineQueuedAt: '排队中',
-      onlineQueuedSuffix: '人在前面',
+      onlineAutoServer: '服务器',
+      onlineAutoConnect: '已启用自动连接',
       onlineReconnectNow: '正在重试连接...',
       onlineReconnectIn: '将在此时间后重连',
       onlineStartInfo: '正在进入联机同步对局...',
@@ -141,14 +129,6 @@
     reconnectTimer: null,
     reconnectAt: 0,
     reconnectAttempts: 0,
-    serverInfo: {
-      activeClients: 0,
-      queueLength: 0,
-      maxClients: 60,
-      status: 'idle',
-      queued: false,
-      queuePosition: 0,
-    },
   };
   window.deadtownOnline = online;
 
@@ -181,23 +161,6 @@
     if(retryIn > 0) return `${t.onlineReconnectIn} ${retryIn}s`;
     if(online.state === 'error' && online.desiredConnected) return t.onlineReconnectNow;
     return t.statusIdle;
-  }
-  function onlineServerStatusText(){
-    const t = ot();
-    const status = online.serverInfo?.status || 'idle';
-    if(status === 'full') return t.onlineStatusFull;
-    if(status === 'busy') return t.onlineStatusBusy;
-    return t.onlineStatusIdle;
-  }
-  function onlineServerStatusColor(){
-    const status = online.serverInfo?.status || 'idle';
-    if(status === 'full') return '#ff6767';
-    if(status === 'busy') return '#f0c36b';
-    return '#59c36a';
-  }
-  function onlineUpdateServerInfo(info){
-    if(!info) return;
-    online.serverInfo = Object.assign({}, online.serverInfo || {}, info);
   }
   function onlineScheduleReconnect(delayMs){
     if(online.reconnectTimer || online.connected || online.connecting) return;
@@ -247,7 +210,6 @@
     online.lastSnapshotAt = 0;
     online.pendingSnapshot = null;
     online.lastServerHp = null;
-    online.serverInfo = Object.assign({}, online.serverInfo || {}, { queued: false, queuePosition: 0 });
     if(!keepConnection){
       online.connected = false;
       online.connecting = false;
@@ -409,37 +371,13 @@
   }
 
   function handleOnlineMessage(msg){
-    if(msg.type === 'welcome'){
-      online.clientId = msg.clientId;
-      onlineUpdateServerInfo(msg.server || msg.serverInfo);
-      return;
-    }
-    if(msg.type === 'server_status'){
-      onlineUpdateServerInfo(msg.server || msg.serverInfo);
-      if(state.overlayScreen === 'online-lobby') renderOnlineLobby();
-      return;
-    }
-    if(msg.type === 'queue_status'){
-      onlineUpdateServerInfo(Object.assign({}, msg.server || msg.serverInfo || {}, {
-        queued: true,
-        queuePosition: msg.position || 0,
-      }));
-      if(state.overlayScreen === 'online-lobby') renderOnlineLobby();
-      return;
-    }
-    if(msg.type === 'queue_promoted'){
-      onlineUpdateServerInfo(Object.assign({}, msg.server || msg.serverInfo || {}, { queued: false, queuePosition: 0 }));
-      pushOnlineNotice(lang==='zh' ? '已从排队进入服务器。' : 'You reached the server.', 'info');
-      return;
-    }
+    if(msg.type === 'welcome'){ online.clientId = msg.clientId; return; }
     if(msg.type === 'room_list'){
       online.rooms = Array.isArray(msg.rooms) ? msg.rooms : [];
-      onlineUpdateServerInfo(msg.server || msg.serverInfo);
       if(state.overlayScreen === 'online-lobby') renderOnlineLobby();
       return;
     }
     if(msg.type === 'room_joined' || msg.type === 'room_update'){
-      onlineUpdateServerInfo(msg.server || msg.serverInfo);
       online.roomState = msg.room || null;
       online.roomId = online.roomState?.roomId || null;
       online.countdownEndsAt = online.roomState?.countdownEndsAt || null;
@@ -447,7 +385,6 @@
       return;
     }
     if(msg.type === 'left_room'){
-      onlineUpdateServerInfo(msg.server || msg.serverInfo);
       online.roomId = null;
       online.roomState = null;
       online.peers = {};
@@ -532,7 +469,7 @@
     online.desiredConnected = true;
     const t = ot();
     const roomsMarkup = online.rooms.length ? online.rooms.map(room=>{
-      const disabled = !online.connected || online.serverInfo?.queued || room.started || room.playerCount>=room.maxPlayers;
+      const disabled = room.started || room.playerCount>=room.maxPlayers;
       const joinLabel = room.started ? t.inGame : (room.playerCount>=room.maxPlayers ? 'Full' : t.join);
       return `<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);margin-top:8px;"><div><div class="accent" style="font-size:16px;">${escapeHtml(room.roomName)}</div><div style="opacity:0.75;font-size:13px;">${t.onlineRoomOwner}: ${escapeHtml(room.hostName)} · ${t.players}: ${room.playerCount}/${room.maxPlayers} · ${room.started?t.onlineStateStarted:t.onlineStateWaiting}</div></div><div><button data-join-room="${escapeHtml(room.roomId)}" ${disabled?'disabled':''}>${joinLabel}</button></div></div>`;
     }).join('') : `<p style="opacity:0.72;">${t.noRooms}</p>`;
@@ -543,30 +480,20 @@
       <p class="compactNote"><span class="accent">${t.onlineNoLeaderboard}</span></p>
       <div style="text-align:left;margin:14px 0;padding:12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);">
         <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;flex:1;">
-            <div>
-              <div style="opacity:0.72;font-size:13px;margin-bottom:4px;">${t.onlineConnection}</div>
-              <div class="accent" style="font-size:18px;">${onlineAutoStatusText()}</div>
-            </div>
-            <div>
-              <div style="opacity:0.72;font-size:13px;margin-bottom:4px;">${t.onlineServerStatus}</div>
-              <div style="font-size:18px;color:${onlineServerStatusColor()};font-weight:bold;">${onlineServerStatusText()}</div>
-              <div style="opacity:0.72;font-size:12px;margin-top:4px;">${online.serverInfo.activeClients||0}/${online.serverInfo.maxClients||60}${online.serverInfo.queueLength?` · ${t.onlineQueueLabel}: ${online.serverInfo.queueLength}`:''}</div>
-            </div>
-            ${online.serverInfo.queued ? `<div>
-              <div style="opacity:0.72;font-size:13px;margin-bottom:4px;">${t.onlineQueueLabel}</div>
-              <div class="accent" style="font-size:18px;">${t.onlineQueuedAt} #${online.serverInfo.queuePosition||1}</div>
-              <div style="opacity:0.72;font-size:12px;margin-top:4px;">${Math.max(0,(online.serverInfo.queuePosition||1)-1)} ${t.onlineQueuedSuffix}</div>
-            </div>` : ''}
+          <div>
+            <div style="opacity:0.72;font-size:13px;margin-bottom:4px;">${t.onlineAutoServer}</div>
+            <div class="accent" style="font-size:15px;word-break:break-all;">${escapeHtml(online.serverUrl)}</div>
           </div>
           <button id="onlineBackBtn">${t.back}</button>
         </div>
+        <p style="opacity:0.72;font-size:12px;margin:10px 0 0;">${t.onlineAutoConnect}</p>
+        <p style="opacity:0.85;margin:8px 0 0;">${onlineAutoStatusText()}</p>
       </div>
       <div style="text-align:left;margin:14px 0;padding:12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);">
         <label style="display:block;opacity:0.75;margin-bottom:6px;">${t.roomName}</label>
         <input id="onlineRoomNameInput" placeholder="${escapeHtml(t.onlineRoomNameFallback)}" style="width:100%;padding:10px 12px;background:#141111;border:1px solid rgba(255,255,255,0.14);color:#f0e6d8;font:inherit;">
         <div class="controls" style="justify-content:center;flex-wrap:wrap;margin-top:12px;">
-          <button id="onlineCreateBtn" ${(!online.connected || online.serverInfo?.queued)?'disabled':''}>${t.createRoom}</button>
+          <button id="onlineCreateBtn" ${!online.connected?'disabled':''}>${t.createRoom}</button>
           <button id="onlineRefreshBtn" ${!online.connected?'disabled':''}>${t.refresh}</button>
         </div>
       </div>
