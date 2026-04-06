@@ -157,7 +157,6 @@
     selfAlive: true,
     matchSummary: null,
     matchOverMessage: '',
-    syncGraceTime: 0,
   };
   window.deadtownOnline = online;
 
@@ -421,30 +420,20 @@
     const carriedByCharger = !!self.carryingByCharger;
     const serverZombiePush = (self.zombiePushTime||0) > 0.02;
     const inBurstMove = (player.dashTime||0) > 0 || (player.rocketJumpTime||0) > 0 || (player.knockbackTime||0) > 0;
-    const localActing = !!(player.dashTime||0) || !!mouseDown || !!(typeof touchState === 'object' && touchState && touchState.shootHeld) || !!(state.keys && (state.keys.has('w') || state.keys.has('a') || state.keys.has('s') || state.keys.has('d') || state.keys.has('arrowup') || state.keys.has('arrowleft') || state.keys.has('arrowdown') || state.keys.has('arrowright')));
     if(!state.running || error > 96 || carriedByCharger || serverKnockback){
       player.x = self.x;
       player.y = self.y;
-    }else if((online.syncGraceTime||0) > 0){
-      if(error > 72){
-        player.x = self.x;
-        player.y = self.y;
-      }
     }else if(serverZombiePush){
       if(error > 64){
         player.x = self.x;
         player.y = self.y;
-      }else if(error > 6){
-        player.x += dx * 0.26;
-        player.y += dy * 0.26;
+      }else if(error > 4){
+        player.x += dx * 0.38;
+        player.y += dy * 0.38;
       }
-    }else if(!inBurstMove){
-      const movingThreshold = localActing ? 26 : 14;
-      const movingLerp = localActing ? 0.10 : 0.18;
-      if(error > movingThreshold){
-        player.x += dx * movingLerp;
-        player.y += dy * movingLerp;
-      }
+    }else if(!inBurstMove && error > 14){
+      player.x += dx * 0.18;
+      player.y += dy * 0.18;
     }
     player.zombiePushTime = Math.max(player.zombiePushTime||0, self.zombiePushTime||0);
     player.hp = self.hp;
@@ -505,7 +494,6 @@
       onlineSetSpectating(false);
     online.matchSummary = null;
     online.matchOverMessage = '';
-    online.syncGraceTime = 0;
     }
     online.lastServerHp = self.hp;
   }
@@ -678,7 +666,6 @@
       online.gameMode = 'online';
       onlineSetSpectating(false);
       online.worldSeed = Number.isInteger(msg.worldSeed) ? msg.worldSeed : 12345;
-      online.syncGraceTime = 0.5;
       pushOnlineNotice(ot().onlineStartInfo, 'info');
       resetGame();
       state.pellets = [];
@@ -963,7 +950,6 @@
     onlineSetSpectating(false);
     online.matchSummary = null;
     online.matchOverMessage = '';
-    online.syncGraceTime = 0;
     online.gameMode = 'single';
     return __origGoToMainMenu();
   };
@@ -1229,7 +1215,6 @@
     if(!state.running) return;
     if(state.paused) return;
     state.time += dt;
-    online.syncGraceTime = Math.max(0, (online.syncGraceTime||0) - dt);
     state.buffAnnouncementTimer=Math.max(0,state.buffAnnouncementTimer-dt);
     state.cameraShake=Math.max(0,state.cameraShake-dt*18);
     state.screenFlash=Math.max(0,state.screenFlash-dt*1.2);

@@ -6,7 +6,7 @@ const WebSocket = require('ws');
 const PORT = Number(process.env.PORT || 8080);
 const TICK_RATE = 60;
 const SNAPSHOT_RATE = 60;
-const ROOM_MAX_PLAYERS = 2;
+const ROOM_MAX_PLAYERS = 6;
 const WORLD = { w: 3600, h: 2400 };
 const ROCKET_JUMP_DURATION = 0.5;
 const ROCKET_JUMP_BASE_SPEED = 420;
@@ -370,7 +370,6 @@ function createPlayerState(client) {
     kills: 0,
     buffAnnouncement: '',
     buffAnnouncementTimer: 0,
-    spawnSettleTime: 0.35,
   };
 }
 function reserveKeyForWeapon(weapon) {
@@ -1623,7 +1622,7 @@ function updatePlayerFromClient(client, state) {
   if (Number.isFinite(state.dashVY)) player.dashVY = Number(state.dashVY) || 0;
   if (Number.isFinite(state.dashFacing)) player.dashFacing = Number(state.dashFacing) || 0;
   if (Number.isFinite(state.dashSpinDir)) player.dashSpinDir = (Number(state.dashSpinDir) || 0) < 0 ? -1 : 1;
-  if (!(player.carryingByCharger || (player.knockbackTime || 0) > 0 || (player.spawnSettleTime || 0) > 0) && Number.isFinite(state.x) && Number.isFinite(state.y)) {
+  if (!(player.carryingByCharger || (player.knockbackTime || 0) > 0) && Number.isFinite(state.x) && Number.isFinite(state.y)) {
     player.x = clamp(Number(state.x), player.radius + 2, WORLD.w - (player.radius + 2));
     player.y = clamp(Number(state.y), player.radius + 2, WORLD.h - (player.radius + 2));
     collideWithBuildings(room.world, player);
