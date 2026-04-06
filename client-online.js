@@ -1709,16 +1709,17 @@
     tctx.translate(sx, sy);
     tctx.rotate(ang);
 
-    const beamFarW = farW * 1.16;
-    const mouthX = 8;
-    const mouthHalfH = nearW * 0.24;
+    const beamWidthScale = 1.25;
+    const beamFarW = farW * 1.16 * beamWidthScale;
+    const mouthX = 2;
+    const mouthHalfH = nearW * 0.19 * 1.10;
     const midX = length * 0.44;
     const farX = length;
     const capDepth = length * 0.045;
     const midHalfH = beamFarW * 0.34;
     const farHalfH = beamFarW * 0.49;
-    const apertureRx = 9;
-    const apertureRy = mouthHalfH * 1.34;
+    const apertureRx = 5.5;
+    const apertureRy = mouthHalfH * 1.02;
 
     const softGrad = tctx.createLinearGradient(0, 0, length, 0);
     softGrad.addColorStop(0, 'rgba(0,0,0,0.70)');
@@ -1728,10 +1729,11 @@
     tctx.fillStyle = softGrad;
     tctx.beginPath();
     tctx.moveTo(mouthX, -mouthHalfH);
-    tctx.bezierCurveTo(midX * 0.30, -midHalfH * 0.54, farX - capDepth, -farHalfH * 0.92, farX, -farHalfH);
+    tctx.bezierCurveTo(midX * 0.26, -midHalfH * 0.52, farX - capDepth, -farHalfH * 0.92, farX, -farHalfH);
     tctx.quadraticCurveTo(farX + capDepth * 0.05, 0, farX, farHalfH);
-    tctx.bezierCurveTo(farX - capDepth, farHalfH * 0.92, midX * 0.30, midHalfH * 0.54, mouthX, mouthHalfH);
-    tctx.ellipse(0, 0, apertureRx, apertureRy, 0, Math.PI * 0.5, Math.PI * 1.5, true);
+    tctx.bezierCurveTo(farX - capDepth, farHalfH * 0.92, midX * 0.26, midHalfH * 0.52, mouthX, mouthHalfH);
+    tctx.quadraticCurveTo(-apertureRx * 0.85, apertureRy * 0.72, -apertureRx, 0);
+    tctx.quadraticCurveTo(-apertureRx * 0.85, -apertureRy * 0.72, mouthX, -mouthHalfH);
     tctx.closePath();
     tctx.fill();
 
@@ -1743,11 +1745,12 @@
     coreGrad.addColorStop(1, 'rgba(0,0,0,0)');
     tctx.fillStyle = coreGrad;
     tctx.beginPath();
-    tctx.moveTo(mouthX + 1, -mouthHalfH * 0.58);
-    tctx.bezierCurveTo(midX * 0.28, -midHalfH * 0.42, farX - capDepth * 0.8, -farHalfH * 0.66, farX, -farHalfH * 0.72);
+    tctx.moveTo(mouthX + 0.5, -mouthHalfH * 0.56);
+    tctx.bezierCurveTo(midX * 0.24, -midHalfH * 0.40, farX - capDepth * 0.8, -farHalfH * 0.66, farX, -farHalfH * 0.72);
     tctx.quadraticCurveTo(farX + capDepth * 0.03, 0, farX, farHalfH * 0.72);
-    tctx.bezierCurveTo(farX - capDepth * 0.8, farHalfH * 0.66, midX * 0.28, midHalfH * 0.42, mouthX + 1, mouthHalfH * 0.58);
-    tctx.ellipse(1, 0, apertureRx * 0.72, apertureRy * 0.82, 0, Math.PI * 0.5, Math.PI * 1.5, true);
+    tctx.bezierCurveTo(farX - capDepth * 0.8, farHalfH * 0.66, midX * 0.24, midHalfH * 0.40, mouthX + 0.5, mouthHalfH * 0.56);
+    tctx.quadraticCurveTo(-apertureRx * 0.55, apertureRy * 0.48, -apertureRx * 0.62, 0);
+    tctx.quadraticCurveTo(-apertureRx * 0.55, -apertureRy * 0.48, mouthX + 0.5, -mouthHalfH * 0.56);
     tctx.closePath();
     tctx.fill();
 
