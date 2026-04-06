@@ -10,7 +10,8 @@ const ROOM_MAX_PLAYERS = 6;
 const ROOM_APPEARANCE_COUNT = 8;
 const REVIVE_RADIUS = 72;
 const REVIVE_TIME = 5;
-const DOWNED_MOVE_SPEED = 60;
+const DOWNED_MOVE_SPEED = 30;
+const DOWNED_DEATH_TIME = 30;
 const MAX_ACTIVE_CLIENTS = 60;
 const WORLD = { w: 3600, h: 2400 };
 const ROCKET_JUMP_DURATION = 0.5;
@@ -439,6 +440,9 @@ function createPlayerState(client) {
     dead: false,
     downCount: 0,
     reviveProgress: 0,
+    downedTimer: 0,
+    downedAggroCap: 0,
+    lastStateAt: Date.now(),
     score: 0,
     kills: 0,
     buffAnnouncement: '',
@@ -616,6 +620,24 @@ function addTombstone(room, player){
   room.match.tombstones.push({ id: room.match.nextEntityId++, x: player.x, y: player.y, ownerId: player.id, name: clients.get(player.id)?.name || player.name || 'Player' });
   if (room.match.tombstones.length > 32) room.match.tombstones.splice(0, room.match.tombstones.length - 32);
 }
+function finalizePlayerDeath(room, player){
+  if (!player || player.dead) return;
+  player.hp = 0;
+  player.alive = false;
+  player.dead = true;
+  player.downed = false;
+  player.reviveProgress = 0;
+  player.downedTimer = 0;
+  player.downedAggroCap = 0;
+  player.shootCooldown = 0;
+  player.reloadTimer = 0;
+  player.wasReloading = false;
+  player.dashTime = 0; player.dashVX = 0; player.dashVY = 0;
+  player.rocketJumpTime = 0; player.rocketJumpVX = 0; player.rocketJumpVY = 0;
+  player.knockbackTime = 0; player.knockbackVX = 0; player.knockbackVY = 0;
+  player.carryingByCharger = null;
+  addTombstone(room, player);
+}
 function setPlayerDowned(room, player){
   if (!player || player.dead) return;
   player.hp = Math.max(1, Math.round(player.maxHp * 0.25));
@@ -623,20 +645,32 @@ function setPlayerDowned(room, player){
   player.dead = false;
   player.alive = true;
   player.reviveProgress = 0;
+  player.downedTimer = DOWNED_DEATH_TIME;
+  player.downedAggroCap = 4 + Math.floor((room?.rng ? room.rng() : Math.random()) * 5);
+  player.shootCooldown = 0;
+  player.reloadTimer = 0;
+  player.wasReloading = false;
   player.dashTime = 0; player.dashVX = 0; player.dashVY = 0;
   player.rocketJumpTime = 0; player.rocketJumpVX = 0; player.rocketJumpVY = 0;
   player.knockbackTime = 0; player.knockbackVX = 0; player.knockbackVY = 0;
   player.carryingByCharger = null;
+  player.lastStateAt = Date.now();
 }
 function revivePlayer(room, player){
   if (!player || player.dead || !player.downed) return;
   player.downed = false;
   player.dead = false;
   player.alive = true;
-  player.hp = Math.max(35, Math.round(player.maxHp * 0.5));
+  player.hp = Math.max(1, Math.round(player.maxHp * 0.2));
   player.reviveProgress = 0;
+  player.downedTimer = 0;
+  player.downedAggroCap = 0;
   player.carryingByCharger = null;
   player.knockbackTime = 0; player.knockbackVX = 0; player.knockbackVY = 0;
+  player.shootCooldown = 0;
+  player.reloadTimer = 0;
+  player.wasReloading = false;
+  player.lastStateAt = Date.now();
   pushSoundFx(room, 'pickup', player.x, player.y, { ownerId: player.id });
 }
 
@@ -800,6 +834,13 @@ function damagePlayerServer(room, player, amount) {
       player.dead = true;
       player.downed = false;
       player.reviveProgress = 0;
+      player.shootCooldown = 0;
+      player.reloadTimer = 0;
+      player.wasReloading = false;
+      player.dashTime = 0; player.dashVX = 0; player.dashVY = 0;
+      player.rocketJumpTime = 0; player.rocketJumpVX = 0; player.rocketJumpVY = 0;
+      player.knockbackTime = 0; player.knockbackVX = 0; player.knockbackVY = 0;
+      player.carryingByCharger = null;
       addTombstone(room, player);
       broadcastToRoom(room, { type: 'player_dead', playerId: player.id, name: clientRef?.name || player.name || 'Player' });
     } else {
@@ -1012,10 +1053,21 @@ function updatePlayerTransientStates(room, dt) {
   }
   const standing = livingPlayers(room);
   for (const player of downedPlayers(room)) {
+    player.downedTimer = Math.max(0, (player.downedTimer || DOWNED_DEATH_TIME) - dt);
     const revivers = standing.filter((other) => other.id !== player.id && dist(other.x, other.y, player.x, player.y) <= REVIVE_RADIUS);
     if (revivers.length > 0) player.reviveProgress = Math.min(REVIVE_TIME, (player.reviveProgress || 0) + dt);
     else player.reviveProgress = 0;
-    if ((player.reviveProgress || 0) >= REVIVE_TIME) revivePlayer(room, player);
+    if ((player.reviveProgress || 0) >= REVIVE_TIME) {
+      revivePlayer(room, player);
+      const clientRef = clients.get(player.id);
+      broadcastToRoom(room, { type: 'player_revived', playerId: player.id, name: clientRef?.name || player.name || 'Player' });
+      continue;
+    }
+    if ((player.downedTimer || 0) <= 0) {
+      const clientRef = clients.get(player.id);
+      finalizePlayerDeath(room, player);
+      broadcastToRoom(room, { type: 'player_dead', playerId: player.id, name: clientRef?.name || player.name || 'Player' });
+    }
   }
 }
 function pushShotFx(room, fx) {
@@ -1357,8 +1409,25 @@ function nearestAlivePlayer(room, x, y) {
   }
   return { player: best, distance: bestD };
 }
+function nearestTargetPlayer(room, x, y, downedTargetCounts) {
+  let best = null;
+  let bestD = Infinity;
+  for (const player of livingPlayers(room)) {
+    const d = dist(x, y, player.x, player.y);
+    if (d < bestD) { bestD = d; best = player; }
+  }
+  for (const player of downedPlayers(room)) {
+    const used = downedTargetCounts.get(player.id) || 0;
+    const cap = Math.max(0, player.downedAggroCap || 0);
+    if (used >= cap) continue;
+    const d = dist(x, y, player.x, player.y);
+    if (d < bestD + 140) { bestD = d; best = player; }
+  }
+  if (best && best.downed) downedTargetCounts.set(best.id, (downedTargetCounts.get(best.id) || 0) + 1);
+  return { player: best, distance: bestD };
+}
 function updateCharger(room, z, dt) {
-  const targetData = nearestAlivePlayer(room, z.x, z.y);
+  const targetData = nearestTargetPlayer(room, z.x, z.y, downedTargetCounts);
   const target = targetData.player;
   if (!target) return;
   const dx = target.x - z.x;
@@ -1446,6 +1515,7 @@ function updateCharger(room, z, dt) {
 }
 function updateZombies(room, dt) {
   const match = room.match;
+  const downedTargetCounts = new Map();
   for (let i = match.zombies.length - 1; i >= 0; i -= 1) {
     const z = match.zombies[i];
     z.touchTimer = Math.max(0, (z.touchTimer || 0) - dt);
@@ -1457,7 +1527,7 @@ function updateZombies(room, dt) {
         z.pounceTime -= dt;
         moveWithWallCollision(room.world, z, z.vx * dt, z.vy * dt);
       } else {
-        const targetData = nearestAlivePlayer(room, z.x, z.y);
+        const targetData = nearestTargetPlayer(room, z.x, z.y, downedTargetCounts);
         const target = targetData.player;
         if (target) {
           const dx = target.x - z.x;
@@ -1475,7 +1545,7 @@ function updateZombies(room, dt) {
         }
       }
     } else {
-      const targetData = nearestAlivePlayer(room, z.x, z.y);
+      const targetData = nearestTargetPlayer(room, z.x, z.y, downedTargetCounts);
       const target = targetData.player;
       if (target) {
         const dx = target.x - z.x;
@@ -1756,8 +1826,49 @@ function updatePlayerFromClient(client, state) {
   const room = rooms.get(client.roomId);
   if (!room || !room.started || !room.match) return;
   const player = room.match.playersById.get(client.id);
-  if (!player || !player.alive || player.dead) return;
+  if (!player || !player.alive) return;
+  const nowMs = Date.now();
+  const elapsed = clamp((nowMs - (player.lastStateAt || nowMs)) / 1000, 1 / 120, 0.2);
+  player.lastStateAt = nowMs;
   if (typeof state.name === 'string' && state.name.trim()) client.name = state.name.trim().slice(0, 18);
+  if (Number.isFinite(state.seq)) player.lastInputSeq = Math.max(player.lastInputSeq || 0, Math.floor(Number(state.seq) || 0));
+  if (player.dead) {
+    player.moving = false;
+    player.name = client.name;
+    return;
+  }
+  if (player.downed) {
+    player.shootCooldown = 0;
+    player.reloadTimer = 0;
+    player.wasReloading = false;
+    player.dashTime = 0; player.dashVX = 0; player.dashVY = 0;
+    player.rocketJumpTime = 0; player.rocketJumpVX = 0; player.rocketJumpVY = 0;
+    if (!(player.carryingByCharger || (player.knockbackTime || 0) > 0) && Number.isFinite(state.x) && Number.isFinite(state.y)) {
+      const targetX = clamp(Number(state.x), player.radius + 2, WORLD.w - (player.radius + 2));
+      const targetY = clamp(Number(state.y), player.radius + 2, WORLD.h - (player.radius + 2));
+      let dx = targetX - player.x;
+      let dy = targetY - player.y;
+      const distance = Math.hypot(dx, dy);
+      const maxStep = DOWNED_MOVE_SPEED * elapsed * 1.35 + 2;
+      if (distance > 0) {
+        if (distance <= maxStep) {
+          player.x = targetX;
+          player.y = targetY;
+        } else {
+          player.x += (dx / distance) * maxStep;
+          player.y += (dy / distance) * maxStep;
+        }
+        player.x = clamp(player.x, player.radius + 2, WORLD.w - (player.radius + 2));
+        player.y = clamp(player.y, player.radius + 2, WORLD.h - (player.radius + 2));
+        collideWithBuildings(room.world, player);
+      }
+    }
+    if (Number.isFinite(state.faceDir)) player.faceDir = state.faceDir < 0 ? -1 : 1;
+    if (Number.isFinite(state.aimAngle)) player.aimAngle = Number(state.aimAngle);
+    player.moving = !!state.moving;
+    player.name = client.name;
+    return;
+  }
   const incomingDashTime = Number.isFinite(state.dashTime) ? Math.max(0, Number(state.dashTime) || 0) : 0;
   if (incomingDashTime > 0.12 && (player.dashTime || 0) <= 0.02) pushSoundFx(room, 'dash', player.x, player.y, { ownerId: player.id });
   if (Number.isFinite(state.dashTime)) player.dashTime = Math.max(player.dashTime || 0, incomingDashTime);
@@ -1765,7 +1876,6 @@ function updatePlayerFromClient(client, state) {
   if (Number.isFinite(state.dashVY)) player.dashVY = Number(state.dashVY) || 0;
   if (Number.isFinite(state.dashFacing)) player.dashFacing = Number(state.dashFacing) || 0;
   if (Number.isFinite(state.dashSpinDir)) player.dashSpinDir = (Number(state.dashSpinDir) || 0) < 0 ? -1 : 1;
-  if (Number.isFinite(state.seq)) player.lastInputSeq = Math.max(player.lastInputSeq || 0, Math.floor(Number(state.seq) || 0));
   if (!(player.carryingByCharger || (player.knockbackTime || 0) > 0) && Number.isFinite(state.x) && Number.isFinite(state.y)) {
     player.x = clamp(Number(state.x), player.radius + 2, WORLD.w - (player.radius + 2));
     player.y = clamp(Number(state.y), player.radius + 2, WORLD.h - (player.radius + 2));
@@ -1819,6 +1929,7 @@ function snapshotForClient(room, client) {
     downCount: p.downCount || 0,
     reviveProgress: p.reviveProgress || 0,
     reviveRadius: REVIVE_RADIUS,
+    downedTimer: p.downedTimer || 0,
     appearanceIndex: Number.isInteger(clients.get(p.id)?.appearanceIndex) ? clients.get(p.id).appearanceIndex : 0,
     buffAnnouncement: p.id === client.id ? p.buffAnnouncement : '',
     buffAnnouncementTimer: p.id === client.id ? p.buffAnnouncementTimer : 0,
