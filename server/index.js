@@ -533,23 +533,28 @@ function startMatch(room) {
   broadcastRoomList();
 }
 function buildMatchSummary(room) {
-  if (!room.match) return { surviveTime: 0, totalScore: 0, totalKills: 0, players: [] };
-  const surviveTime = Math.floor(room.match.surviveTime || 0);
-  const players = currentPlayers(room).map((p) => ({
-    id: p.id,
-    name: clients.get(p.id)?.name || p.name || 'Player',
-    score: Math.floor(p.score || 0),
-    kills: Math.floor(p.kills || 0),
-    surviveTime,
-    alive: !!p.alive && (p.hp || 0) > 0,
-  })).sort((a, b) => (b.score - a.score) || (b.kills - a.kills) || String(a.name).localeCompare(String(b.name)));
+  if (!room || !room.match) return null;
+  const players = currentPlayers(room).map((p) => {
+    const clientRef = clients.get(p.id);
+    return {
+      id: p.id,
+      name: clientRef?.name || p.name || 'Player',
+      score: Math.round(p.score || 0),
+      kills: Math.round(p.kills || 0),
+      surviveTime: Number.isFinite(p.surviveTime) ? p.surviveTime : (p.alive ? room.match.surviveTime : 0),
+      alive: !!p.alive && (p.hp || 0) > 0,
+    };
+  });
+  const totalScore = players.reduce((sum, p) => sum + (p.score || 0), 0);
+  const totalKills = players.reduce((sum, p) => sum + (p.kills || 0), 0);
   return {
-    surviveTime,
-    totalScore: players.reduce((sum, p) => sum + (p.score || 0), 0),
-    totalKills: players.reduce((sum, p) => sum + (p.kills || 0), 0),
+    surviveTime: room.match.surviveTime,
+    totalScore,
+    totalKills,
     players,
   };
 }
+
 function endMatch(room, reason = 'All players down.') {
   if (!room.started) return;
   const summary = buildMatchSummary(room);
@@ -560,7 +565,7 @@ function endMatch(room, reason = 'All players down.') {
   room.worldSeed = null;
   room.rng = null;
   for (const client of room.players.values()) client.ready = false;
-  broadcastToRoom(room, { type: 'match_over', message: reason, summary, room: roomPublicState(room) });
+  broadcastToRoom(room, { type: 'match_over', message: reason, room: roomPublicState(room), summary });
   broadcastRoomState(room, 'room_update');
   broadcastRoomList();
 }
@@ -1726,7 +1731,10 @@ function updateRoom(room, dt) {
     spawnZombie(room);
   }
   updatePlayerTransientStates(room, dt);
-  for (const player of currentPlayers(room)) updateReload(player, dt);
+  for (const player of currentPlayers(room)) {
+    if (player.alive && player.hp > 0) player.surviveTime = (player.surviveTime || 0) + dt;
+    updateReload(player, dt);
+  }
   processPendingExplosions(room, dt);
   processProjectiles(room, dt);
   processFireZones(room, dt);

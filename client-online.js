@@ -50,13 +50,19 @@
       onlineServerPlaceholder: 'ws://localhost:8080',
       onlineStartInfo: 'Starting synchronized online match...',
       onlineMatchEnded: 'Match ended.',
-      onlineScoreboard: 'MATCH SCORE',
-      onlineTotalScore: 'TEAM TOTAL',
+      onlineScoreboard: 'SCORES',
+      onlineTotalScore: 'TOTAL',
       onlineSummaryTitle: 'MATCH SUMMARY',
-      onlineSummaryReturn: 'Back to Room',
-      onlineSummaryMenu: 'Main Menu',
-      onlineSummarySurvive: 'Survived',
-      onlineSummaryCombined: 'Combined',
+      onlineSummaryDesc: 'Online match complete.',
+      onlineSummaryPlayer: 'Player',
+      onlineSummaryScore: 'Score',
+      onlineSummaryKills: 'Kills',
+      onlineSummarySurvive: 'Survive',
+      onlineSummaryTotalScore: 'Team Score',
+      onlineSummaryTotalKills: 'Team Kills',
+      onlineSummaryMatchTime: 'Match Time',
+      returnToRoom: 'Return to Room',
+      mainMenu: 'Main Menu',
     },
     zh: {
       onlineBtn: '在线合作',
@@ -104,13 +110,19 @@
       onlineServerPlaceholder: 'ws://localhost:8080',
       onlineStartInfo: '正在进入联机同步对局...',
       onlineMatchEnded: '对局已结束。',
-      onlineScoreboard: '局内积分',
+      onlineScoreboard: '局内分数',
       onlineTotalScore: '总分',
       onlineSummaryTitle: '对局结算',
-      onlineSummaryReturn: '返回房间',
-      onlineSummaryMenu: '主菜单',
+      onlineSummaryDesc: '在线对局结束。',
+      onlineSummaryPlayer: '玩家',
+      onlineSummaryScore: '分数',
+      onlineSummaryKills: '击杀',
       onlineSummarySurvive: '存活时间',
-      onlineSummaryCombined: '总计',
+      onlineSummaryTotalScore: '队伍总分',
+      onlineSummaryTotalKills: '队伍总击杀',
+      onlineSummaryMatchTime: '对局时长',
+      returnToRoom: '返回房间',
+      mainMenu: '主菜单',
     }
   };
 
@@ -144,6 +156,7 @@
     spectateTargetId: null,
     selfAlive: true,
     matchSummary: null,
+    matchOverMessage: '',
   };
   window.deadtownOnline = online;
 
@@ -229,7 +242,6 @@
     online.spectating = false;
     online.spectateTargetId = null;
     online.selfAlive = true;
-    online.matchSummary = null;
     if(!keepConnection){
       online.connected = false;
       online.connecting = false;
@@ -276,7 +288,7 @@
       ws.onerror = ()=>{ online.state = 'error'; renderOnlineLobby(); };
       ws.onclose = ()=>{
         const wasOnlineMatch = state.running && !state.gameOver && onlineIsMode();
-        const wasInMenu = !state.running || state.gameOver || state.overlayScreen==='online-lobby' || state.overlayScreen==='online-room';
+        const wasInMenu = !state.running || state.gameOver || state.overlayScreen==='online-lobby' || state.overlayScreen==='online-room' || state.overlayScreen==='online-summary';
         onlineResetState(true);
         online.connected = false;
         online.connecting = false;
@@ -478,6 +490,8 @@
       onlineSetSpectating(true);
     }else if(!wasAlive && online.selfAlive){
       onlineSetSpectating(false);
+    online.matchSummary = null;
+    online.matchOverMessage = '';
     }
     online.lastServerHp = self.hp;
   }
@@ -710,164 +724,23 @@
       return;
     }
     if(msg.type === 'match_over'){
-      pushOnlineNotice(msg.message || ot().onlineMatchEnded, 'warn');
       online.started = false;
       onlineSetSpectating(false);
-      online.gameMode = 'online';
       online.matchSummary = msg.summary || null;
-      renderOnlineMatchSummary(msg.summary || null, msg.message || ot().onlineMatchEnded);
+      online.matchOverMessage = msg.message || ot().onlineMatchEnded;
+      online.roomState = msg.room || online.roomState;
+      online.gameMode = 'online';
+      state.running = false;
+      state.paused = false;
+      state.gameOver = false;
+      mouseDown = false;
+      if(typeof touchState === 'object' && touchState) touchState.shootHeld = false;
+      renderOnlineMatchSummary(online.matchSummary, online.matchOverMessage);
       return;
     }
     if(msg.type === 'error'){
       pushOnlineNotice(msg.message || 'Server error', 'error');
     }
-  }
-
-
-  function getOnlineScoreRows(){
-    const rows = [];
-    const selfName = state.playerName || ((lang==='zh') ? '玩家' : 'Player');
-    rows.push({ id: online.clientId || 'self', name: selfName, score: Math.floor(Number(state.score)||0), kills: Math.floor(Number(state.kills)||0), alive: online.selfAlive !== false });
-    for(const [id, peer] of Object.entries(online.peers || {})){
-      rows.push({
-        id,
-        name: peer.name || ((lang==='zh') ? '玩家' : 'Player'),
-        score: Math.floor(Number(peer.score)||0),
-        kills: Math.floor(Number(peer.kills)||0),
-        alive: !!peer.alive && (peer.hp||0) > 0,
-      });
-    }
-    rows.sort((a,b)=> (b.score-a.score) || (b.kills-a.kills) || String(a.name).localeCompare(String(b.name)));
-    return rows;
-  }
-
-  function getOnlineScoreboardLayout(){
-    const mobile = MOBILE_MODE;
-    const rows = getOnlineScoreRows();
-    const mw = mobile ? 118 : 180;
-    const mh = mobile ? 76 : 120;
-    const rowH = mobile ? 16 : 18;
-    const headerH = mobile ? 18 : 20;
-    const footerH = mobile ? 18 : 20;
-    const boardH = headerH + footerH + rows.length * rowH + 8;
-    const gap = 6;
-    const mx = mobile ? (SW-mw-8) : (SW-mw-14);
-    const my = mobile ? 8 : Math.max(10, SH - mh - boardH - gap - 14);
-    return { mobile, rows, mw, mh, mx, my, rowH, headerH, footerH, boardH, boardY: my + mh + gap };
-  }
-
-  const __origDrawMinimap = drawMinimap;
-  drawMinimap = function(cam){
-    if(!(online.connected && online.started && onlineIsMode() && state.running && !state.gameOver)){
-      return __origDrawMinimap(cam);
-    }
-    const { mobile, mw, mh, mx, my } = getOnlineScoreboardLayout();
-    pxRect(mx,my,mw,mh,'rgba(10,10,10,0.72)');
-    ctx.strokeStyle='rgba(255,255,255,0.15)';
-    ctx.strokeRect(mx,my,mw,mh);
-    const sx=mw/WORLD.w, sy=mh/WORLD.h;
-    ctx.fillStyle='rgba(70,70,70,0.6)';
-    for(const b of WORLD.buildings) ctx.fillRect(mx+b.x*sx,my+b.y*sy,Math.max(1,b.w*sx),Math.max(1,b.h*sy));
-    ctx.fillStyle='rgba(100,100,100,0.4)';
-    for(const r of WORLD.road) ctx.fillRect(mx+r.x*sx,my+r.y*sy,Math.max(1,r.w*sx),Math.max(1,r.h*sy));
-    ctx.fillStyle='#ff5555';
-    for(const z of state.zombies) ctx.fillRect(mx+z.x*sx,my+z.y*sy,z.type==='boss'?(mobile?3:4):2,z.type==='boss'?(mobile?3:4):2);
-    ctx.fillStyle='#7fc4ff';
-    for(const a of state.airdrops) ctx.fillRect(mx+a.x*sx-2,my+a.y*sy-2,mobile?4:5,mobile?4:5);
-    ctx.fillStyle='#ffd27f';
-    ctx.fillRect(mx+player.x*sx-2,my+player.y*sy-2,mobile?3:4,mobile?3:4);
-    for(const peer of Object.values(online.peers || {})){
-      const pxv = Number.isFinite(peer.displayX) ? peer.displayX : peer.x;
-      const pyv = Number.isFinite(peer.displayY) ? peer.displayY : peer.y;
-      ctx.fillStyle = peer.alive === false ? 'rgba(180,180,180,0.7)' : '#9cc2ff';
-      ctx.fillRect(mx+pxv*sx-2,my+pyv*sy-2,mobile?3:4,mobile?3:4);
-    }
-    ctx.strokeStyle='rgba(255,255,255,0.4)';
-    ctx.strokeRect(mx+cam.x*sx,my+cam.y*sy,SW*sx,SH*sy);
-  };
-
-  function drawOnlineScoreboardPanel(){
-    if(!(online.connected && online.started && onlineIsMode() && state.running && !state.gameOver)) return;
-    const t = ot();
-    const { rows, mw, mx, rowH, headerH, footerH, boardH, boardY } = getOnlineScoreboardLayout();
-    const totalScore = rows.reduce((sum,row)=>sum + (row.score||0),0);
-    pxRect(mx, boardY, mw, boardH, 'rgba(10,10,10,0.82)');
-    ctx.strokeStyle='rgba(255,255,255,0.15)';
-    ctx.strokeRect(mx, boardY, mw, boardH);
-    ctx.textAlign='left';
-    ctx.font = (MOBILE_MODE ? 'bold 11px Courier New' : 'bold 12px Courier New');
-    ctx.fillStyle='#9cc2ff';
-    ctx.fillText(t.onlineScoreboard, mx + 8, boardY + 14);
-    let y = boardY + headerH;
-    ctx.font = (MOBILE_MODE ? '11px Courier New' : '12px Courier New');
-    for(const row of rows){
-      const isSelf = row.id === online.clientId;
-      ctx.fillStyle = isSelf ? '#ffd27f' : '#f0e6d8';
-      let label = String(row.name || ((lang==='zh') ? '玩家' : 'Player'));
-      const maxChars = MOBILE_MODE ? 9 : 12;
-      if(label.length > maxChars) label = `${label.slice(0, maxChars-1)}…`;
-      ctx.fillText(label, mx + 8, y + 12);
-      ctx.textAlign='right';
-      ctx.fillText(String(Math.floor(row.score||0)), mx + mw - 8, y + 12);
-      ctx.textAlign='left';
-      y += rowH;
-    }
-    ctx.strokeStyle='rgba(255,255,255,0.1)';
-    ctx.beginPath();
-    ctx.moveTo(mx + 6, y + 1);
-    ctx.lineTo(mx + mw - 6, y + 1);
-    ctx.stroke();
-    ctx.fillStyle='#ffd27f';
-    ctx.fillText(t.onlineTotalScore, mx + 8, y + footerH - 5);
-    ctx.textAlign='right';
-    ctx.fillText(String(Math.floor(totalScore)), mx + mw - 8, y + footerH - 5);
-    ctx.textAlign='left';
-  }
-
-  function renderOnlineMatchSummary(summary, message){
-    const t = ot();
-    const safeSummary = summary || { players: [], totalScore: Math.floor(Number(state.score)||0), totalKills: Math.floor(Number(state.kills)||0), surviveTime: Math.floor(Number(state.surviveTime)||0) };
-    online.matchSummary = safeSummary;
-    state.running = false;
-    state.gameOver = false;
-    state.paused = false;
-    state.deathAnim = 0;
-    mouseDown = false;
-    updateCursorVisibility();
-    const rows = (safeSummary.players || []).map((row)=>{
-      const name = escapeHtml(row.name || ((lang==='zh') ? '玩家' : 'Player'));
-      return `<div style="display:grid;grid-template-columns:1.4fr 0.8fr 0.8fr 1fr;gap:10px;padding:8px 10px;border-top:1px solid rgba(255,255,255,0.08);align-items:center;"><div class="accent">${name}</div><div>${Math.floor(Number(row.score)||0)}</div><div>${Math.floor(Number(row.kills)||0)}</div><div>${Math.floor(Number(row.surviveTime)||0)} s</div></div>`;
-    }).join('');
-    const surviveValue = Math.floor(Number(safeSummary.surviveTime)||0);
-    $('overlayCard').className='card';
-    $('overlayCard').innerHTML = `
-      <h2>${t.onlineSummaryTitle}</h2>
-      <p>${escapeHtml(message || t.onlineMatchEnded)}</p>
-      <div style="margin-top:14px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);text-align:left;">
-        <div style="display:grid;grid-template-columns:1.4fr 0.8fr 0.8fr 1fr;gap:10px;padding:8px 10px;background:rgba(255,255,255,0.05);font-weight:bold;">
-          <div>${t.players}</div><div>${T[lang].score}</div><div>${T[lang].kills}</div><div>${t.onlineSummarySurvive}</div>
-        </div>
-        ${rows}
-        <div style="display:grid;grid-template-columns:1.4fr 0.8fr 0.8fr 1fr;gap:10px;padding:10px;border-top:1px solid rgba(255,255,255,0.12);background:rgba(255,210,127,0.08);font-weight:bold;">
-          <div class="accent">${t.onlineSummaryCombined}</div>
-          <div class="accent">${Math.floor(Number(safeSummary.totalScore)||0)}</div>
-          <div class="accent">${Math.floor(Number(safeSummary.totalKills)||0)}</div>
-          <div class="accent">${surviveValue} s</div>
-        </div>
-      </div>
-      <div class="controls" style="justify-content:center;margin-top:12px;">
-        <button id="onlineSummaryRoomBtn">${t.onlineSummaryReturn}</button>
-        <button id="onlineSummaryMenuBtn">${t.onlineSummaryMenu}</button>
-      </div>
-    `;
-    state.overlayScreen = 'online-summary';
-    $('overlay').classList.remove('hidden');
-    setTimeout(()=>{
-      const roomBtn = $('onlineSummaryRoomBtn');
-      if(roomBtn) roomBtn.onclick = ()=>{ online.matchSummary = null; if(online.roomState){ renderOnlineRoom(); } else { goToMainMenu(); } };
-      const menuBtn = $('onlineSummaryMenuBtn');
-      if(menuBtn) menuBtn.onclick = ()=>{ online.matchSummary = null; if(online.roomId) onlineSend({ type:'leave_room' }); goToMainMenu(); };
-    },0);
   }
 
   function createOnlineRoom(){
@@ -960,6 +833,55 @@
 
   window.joinOnlineRoom = joinOnlineRoom;
 
+  function formatOnlineTime(seconds){
+    const total = Math.max(0, Math.floor(seconds || 0));
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  function renderOnlineMatchSummary(summary, message){
+    const t = ot();
+    const safeSummary = summary || { players: [], totalScore: 0, totalKills: 0, surviveTime: 0 };
+    const players = Array.isArray(safeSummary.players) ? safeSummary.players.slice().sort((a,b)=> (b.score||0) - (a.score||0)) : [];
+    state.overlayScreen = 'online-summary';
+    $('overlayCard').className='card';
+    const rows = players.map((p)=>`<tr><td style="padding:6px 8px;text-align:left;">${escapeHtml(p.name || 'Player')}</td><td style="padding:6px 8px;">${Math.round(p.score||0)}</td><td style="padding:6px 8px;">${Math.round(p.kills||0)}</td><td style="padding:6px 8px;">${formatOnlineTime(p.surviveTime||0)}</td></tr>`).join('');
+    $('overlayCard').innerHTML = `
+      <h2>${t.onlineSummaryTitle}</h2>
+      <p>${escapeHtml(message || t.onlineSummaryDesc)}</p>
+      <div style="margin:14px 0;padding:10px 12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);text-align:left;">
+        <div><span class="accent">${t.onlineSummaryTotalScore}:</span> ${Math.round(safeSummary.totalScore||0)}</div>
+        <div style="margin-top:6px;"><span class="accent">${t.onlineSummaryTotalKills}:</span> ${Math.round(safeSummary.totalKills||0)}</div>
+        <div style="margin-top:6px;"><span class="accent">${t.onlineSummaryMatchTime}:</span> ${formatOnlineTime(safeSummary.surviveTime||0)}</div>
+      </div>
+      <div style="max-height:340px;overflow:auto;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);">
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+          <thead>
+            <tr>
+              <th style="padding:8px 8px;text-align:left;">${t.onlineSummaryPlayer}</th>
+              <th style="padding:8px 8px;">${t.onlineSummaryScore}</th>
+              <th style="padding:8px 8px;">${t.onlineSummaryKills}</th>
+              <th style="padding:8px 8px;">${t.onlineSummarySurvive}</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="controls" style="justify-content:center;flex-wrap:wrap;margin-top:14px;">
+        <button id="onlineSummaryRoomBtn">${t.returnToRoom}</button>
+        <button id="onlineSummaryMenuBtn">${t.mainMenu}</button>
+      </div>
+    `;
+    $('overlay').classList.remove('hidden');
+    setTimeout(()=>{
+      const roomBtn = $('onlineSummaryRoomBtn');
+      if(roomBtn) roomBtn.onclick = ()=>renderOnlineRoom();
+      const menuBtn = $('onlineSummaryMenuBtn');
+      if(menuBtn) menuBtn.onclick = ()=>{ onlineDisconnect(true); goToMainMenu(); };
+    },0);
+  }
+
   setInterval(()=>{
     if(state.overlayScreen === 'online-room' && online.roomState && online.roomState.countdownEndsAt && !online.roomState.started){
       renderOnlineRoom();
@@ -1024,6 +946,8 @@
     online.worldSeed = null;
     online.peers = {};
     onlineSetSpectating(false);
+    online.matchSummary = null;
+    online.matchOverMessage = '';
     online.gameMode = 'single';
     return __origGoToMainMenu();
   };
@@ -1468,6 +1392,94 @@
     return temp;
   }
 
+
+  function getOnlineScoreEntries(){
+    const entries = [];
+    entries.push({ id: online.clientId || 'self', name: state.playerName || 'Player', score: Math.round(player.score || 0) });
+    for(const peer of Object.values(online.peers || {})) entries.push({ id: peer.id, name: peer.name || 'Player', score: Math.round(peer.score || 0) });
+    entries.sort((a,b)=> (b.score||0) - (a.score||0));
+    return entries;
+  }
+
+  function getOnlineScoreboardLayout(){
+    const mobile = MOBILE_MODE;
+    const entries = getOnlineScoreEntries();
+    const mw = mobile ? 118 : 180;
+    const mh = mobile ? 76 : 120;
+    const rowH = mobile ? 14 : 16;
+    const headerH = mobile ? 18 : 20;
+    const totalH = mobile ? 16 : 18;
+    const panelH = headerH + entries.length * rowH + totalH + 10;
+    const mx = mobile ? (SW - mw - 8) : (SW - mw - 14);
+    let my = mobile ? 8 : (SH - mh - 14 - panelH - 8);
+    if(my < 8) my = 8;
+    const panelY = my + mh + 8;
+    return { entries, mw, mh, mx, my, panelY, panelH, rowH, headerH, totalH, totalScore: entries.reduce((sum,e)=>sum + (e.score||0), 0) };
+  }
+
+  const __origDrawMinimap = drawMinimap;
+  drawMinimap = function(cam){
+    if(!(online.connected && online.started && onlineIsMode() && state.running && !state.gameOver)) return __origDrawMinimap(cam);
+    const mobile = MOBILE_MODE;
+    const { mw, mh, mx, my } = getOnlineScoreboardLayout();
+    pxRect(mx,my,mw,mh,'rgba(10,10,10,0.72)');
+    ctx.strokeStyle='rgba(255,255,255,0.15)';
+    ctx.strokeRect(mx,my,mw,mh);
+    const sx=mw/WORLD.w, sy=mh/WORLD.h;
+    ctx.fillStyle='rgba(70,70,70,0.6)';
+    for(const b of WORLD.buildings) ctx.fillRect(mx+b.x*sx,my+b.y*sy,Math.max(1,b.w*sx),Math.max(1,b.h*sy));
+    ctx.fillStyle='rgba(100,100,100,0.4)';
+    for(const r of WORLD.road) ctx.fillRect(mx+r.x*sx,my+r.y*sy,Math.max(1,r.w*sx),Math.max(1,r.h*sy));
+    ctx.fillStyle='#ff5555';
+    for(const z of state.zombies) ctx.fillRect(mx+z.x*sx,my+z.y*sy,z.type==='boss'?(mobile?3:4):2,z.type==='boss'?(mobile?3:4):2);
+    ctx.fillStyle='#7fc4ff';
+    for(const a of state.airdrops) ctx.fillRect(mx+a.x*sx-2,my+a.y*sy-2,mobile?4:5,mobile?4:5);
+    ctx.fillStyle='#ffd27f';
+    ctx.fillRect(mx+player.x*sx-2,my+player.y*sy-2,mobile?3:4,mobile?3:4);
+    for(const peer of Object.values(online.peers || {})){
+      const pxv = Number.isFinite(peer.displayX) ? peer.displayX : (peer.x || 0);
+      const pyv = Number.isFinite(peer.displayY) ? peer.displayY : (peer.y || 0);
+      ctx.fillStyle='#9cc2ff';
+      ctx.fillRect(mx+pxv*sx-2,my+pyv*sy-2,mobile?3:4,mobile?3:4);
+    }
+    ctx.strokeStyle='rgba(255,255,255,0.4)';
+    ctx.strokeRect(mx+cam.x*sx,my+cam.y*sy,SW*sx,SH*sy);
+  };
+
+  function drawOnlineScoreboardPanel(){
+    if(!(online.connected && online.started && onlineIsMode() && state.running && !state.gameOver)) return;
+    const t = ot();
+    const layout = getOnlineScoreboardLayout();
+    const { entries, mx, mw, panelY, panelH, rowH, headerH, totalScore } = layout;
+    pxRect(mx,panelY,mw,panelH,'rgba(10,10,10,0.74)');
+    ctx.strokeStyle='rgba(255,255,255,0.15)';
+    ctx.strokeRect(mx,panelY,mw,panelH);
+    ctx.font = `${MOBILE_MODE ? 'bold 11px' : 'bold 12px'} Courier New`;
+    ctx.textAlign='left';
+    ctx.fillStyle='#9cc2ff';
+    ctx.fillText(t.onlineScoreboard, mx + 8, panelY + 14);
+    let y = panelY + headerH;
+    ctx.font = `${MOBILE_MODE ? '11px' : '12px'} Courier New`;
+    for(const entry of entries){
+      const isSelf = entry.id === (online.clientId || 'self');
+      ctx.fillStyle = isSelf ? '#ffd27f' : '#f0e6d8';
+      ctx.fillText(String(entry.name || 'Player').slice(0, MOBILE_MODE ? 10 : 14), mx + 8, y);
+      ctx.textAlign='right';
+      ctx.fillText(String(Math.round(entry.score || 0)), mx + mw - 8, y);
+      ctx.textAlign='left';
+      y += rowH;
+    }
+    ctx.strokeStyle='rgba(255,255,255,0.08)';
+    ctx.beginPath();
+    ctx.moveTo(mx + 6, panelY + panelH - 24);
+    ctx.lineTo(mx + mw - 6, panelY + panelH - 24);
+    ctx.stroke();
+    ctx.fillStyle='#f0d39c';
+    ctx.fillText(t.onlineTotalScore, mx + 8, panelY + panelH - 8);
+    ctx.textAlign='right';
+    ctx.fillText(String(Math.round(totalScore || 0)), mx + mw - 8, panelY + panelH - 8);
+    ctx.textAlign='left';
+  }
 
   const __origDrawPlayer = drawPlayer;
   drawPlayer = function(cam){
