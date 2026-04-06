@@ -1653,6 +1653,124 @@
     return { entries, mw, mh, mx, my, panelY, panelH, rowH, headerH, totalH, totalScore: entries.reduce((sum,e)=>sum + (e.score||0), 0) };
   }
 
+
+
+  const __origDrawFog = drawFog;
+  let onlineLightCanvas = null;
+  let onlineLightCtx = null;
+
+  function ensureLightingCanvas(){
+    if(!onlineLightCanvas || onlineLightCanvas.width !== SW || onlineLightCanvas.height !== SH){
+      onlineLightCanvas = document.createElement('canvas');
+      onlineLightCanvas.width = SW;
+      onlineLightCanvas.height = SH;
+      onlineLightCtx = onlineLightCanvas.getContext('2d');
+    }
+    return onlineLightCtx;
+  }
+
+  function localFlashlightAngle(cam){
+    const worldMouseX=cam.x+state.mouse.x, worldMouseY=cam.y+state.mouse.y;
+    const mobileAimActive = MOBILE_MODE && touchState.aim.active && Math.hypot(touchState.aim.dx,touchState.aim.dy)>12;
+    if(!MOBILE_MODE || mobileAimActive) return Math.atan2(worldMouseY-player.y,worldMouseX-player.x);
+    if(player.dashTime>0) return player.dashFacing||0;
+    if(player.rocketJumpTime>0) return Math.atan2(player.rocketJumpVY||0,player.rocketJumpVX||player.faceDir||1);
+    if(player.knockbackTime>0) return Math.atan2(player.knockbackVY||0,player.knockbackVX||player.faceDir||1);
+    if(Math.hypot(touchState.move.dx,touchState.move.dy)>6) return Math.atan2(touchState.move.dy,touchState.move.dx);
+    return (player.faceDir||1)<0 ? Math.PI : 0;
+  }
+
+  function peerFlashlightAngle(peer){
+    if(Number.isFinite(peer.aimAngle)) return peer.aimAngle;
+    if((peer.dashTime||0)>0 && Number.isFinite(peer.dashFacing)) return peer.dashFacing;
+    if((peer.rocketJumpTime||0)>0) return Math.atan2(peer.rocketJumpVY||0,peer.rocketJumpVX||peer.faceDir||1);
+    if((peer.knockbackTime||0)>0) return Math.atan2(peer.knockbackVY||0,peer.knockbackVX||peer.faceDir||1);
+    return (peer.faceDir||1)<0 ? Math.PI : 0;
+  }
+
+  function carveFlashlight(tctx, sx, sy, ang, opts){
+    const length = opts && opts.length || 520;
+    const nearW = opts && opts.nearW || 64;
+    const farW = opts && opts.farW || 250;
+    const halo = opts && opts.halo || 92;
+
+    const haloGrad = tctx.createRadialGradient(sx, sy, 12, sx, sy, halo);
+    haloGrad.addColorStop(0, 'rgba(0,0,0,0.98)');
+    haloGrad.addColorStop(0.35, 'rgba(0,0,0,0.76)');
+    haloGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    tctx.fillStyle = haloGrad;
+    tctx.beginPath();
+    tctx.arc(sx, sy, halo, 0, Math.PI * 2);
+    tctx.fill();
+
+    tctx.save();
+    tctx.translate(sx, sy);
+    tctx.rotate(ang);
+
+    const softGrad = tctx.createLinearGradient(0, 0, length * 0.92, 0);
+    softGrad.addColorStop(0, 'rgba(0,0,0,0.68)');
+    softGrad.addColorStop(0.28, 'rgba(0,0,0,0.46)');
+    softGrad.addColorStop(0.72, 'rgba(0,0,0,0.18)');
+    softGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    tctx.fillStyle = softGrad;
+    tctx.beginPath();
+    tctx.moveTo(4, -nearW * 0.95);
+    tctx.lineTo(length * 0.56, -farW * 0.70);
+    tctx.lineTo(length, -farW);
+    tctx.lineTo(length, farW);
+    tctx.lineTo(length * 0.56, farW * 0.70);
+    tctx.lineTo(4, nearW * 0.95);
+    tctx.closePath();
+    tctx.fill();
+
+    const coreGrad = tctx.createLinearGradient(0, 0, length, 0);
+    coreGrad.addColorStop(0, 'rgba(0,0,0,0.96)');
+    coreGrad.addColorStop(0.18, 'rgba(0,0,0,0.88)');
+    coreGrad.addColorStop(0.55, 'rgba(0,0,0,0.55)');
+    coreGrad.addColorStop(0.9, 'rgba(0,0,0,0.12)');
+    coreGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    tctx.fillStyle = coreGrad;
+    tctx.beginPath();
+    tctx.moveTo(8, -nearW * 0.56);
+    tctx.lineTo(length * 0.35, -farW * 0.32);
+    tctx.lineTo(length, -farW * 0.56);
+    tctx.lineTo(length, farW * 0.56);
+    tctx.lineTo(length * 0.35, farW * 0.32);
+    tctx.lineTo(8, nearW * 0.56);
+    tctx.closePath();
+    tctx.fill();
+
+    tctx.restore();
+  }
+
+  drawFog = function(cam){
+    const tctx = ensureLightingCanvas();
+    tctx.clearRect(0,0,SW,SH);
+    tctx.fillStyle = 'rgba(0,0,0,0.88)';
+    tctx.fillRect(0,0,SW,SH);
+    const vignette = tctx.createRadialGradient(SW/2, SH/2, 120, SW/2, SH/2, Math.max(SW,SH)*0.84);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.55)');
+    tctx.fillStyle = vignette;
+    tctx.fillRect(0,0,SW,SH);
+    tctx.globalCompositeOperation = 'destination-out';
+
+    const selfPos = worldToScreen(player.x, player.y, cam);
+    carveFlashlight(tctx, selfPos.x, selfPos.y, localFlashlightAngle(cam), { length: 560, nearW: 60, farW: 230, halo: 96 });
+
+    if(online.connected && online.started && onlineIsMode()){
+      for(const peer of Object.values(online.peers || {})){
+        if(peer.dead) continue;
+        const pxv = Number.isFinite(peer.displayX) ? peer.displayX : (peer.x || 0);
+        const pyv = Number.isFinite(peer.displayY) ? peer.displayY : (peer.y || 0);
+        const s = worldToScreen(pxv, pyv, cam);
+        carveFlashlight(tctx, s.x, s.y, peerFlashlightAngle(peer), { length: 560, nearW: 60, farW: 230, halo: 88 });
+      }
+    }
+    tctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(onlineLightCanvas, 0, 0);
+  };
+
   const __origDrawMinimap = drawMinimap;
   drawMinimap = function(cam){
     if(!(online.connected && online.started && onlineIsMode() && state.running && !state.gameOver)) return __origDrawMinimap(cam);
