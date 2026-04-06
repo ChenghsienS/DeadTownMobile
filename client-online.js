@@ -558,6 +558,7 @@
     player.flameAmmo = self.flameAmmo ?? player.flameAmmo;
     player.speedMul = self.speedMul ?? player.speedMul;
     player.damageMul = self.damageMul ?? player.damageMul;
+    if(Number.isFinite(self.appearanceIndex)) player.onlineAppearanceIndex = self.appearanceIndex;
     player.score = self.score ?? player.score ?? state.score ?? 0;
     player.kills = self.kills ?? player.kills ?? state.kills ?? 0;
     if((self.rocketJumpTime||0) > 0.02 && (player.rocketJumpTime||0) <= 0.02){
@@ -1442,11 +1443,9 @@
     if(online.sendTimer<=0){
       online.sendTimer = 1/60;
       if(!spectating){
-        online.localStateSeq = (online.localStateSeq || 0) + 1;
         onlineSend({
           type:'player_state',
           state:{
-            seq: online.localStateSeq,
             x:player.x,
             y:player.y,
             faceDir:player.faceDir,
@@ -1659,10 +1658,29 @@
     ctx.textAlign='left';
   }
 
+  
+  const SURVIVOR_LOOKS = [
+    { hair:'#1f1b18', face:'#d7c6b8', hurt:'#efc0bf', coat:'#4c574d', legs:'#262826', accent:'#71785f', detail:'#8a7b64', gunBody:'#545f66', gunTrim:'#2c2c2c', accessory:'hood' },
+    { hair:'#24201c', face:'#d2c0b0', hurt:'#efc0bf', coat:'#5a4b43', legs:'#2d2623', accent:'#7a675c', detail:'#8d7a6b', gunBody:'#7d614f', gunTrim:'#2c2c2c', accessory:'bandolier' },
+    { hair:'#1b1d20', face:'#d5c4b6', hurt:'#efc0bf', coat:'#4a5560', legs:'#292d31', accent:'#6b7780', detail:'#7f6e61', gunBody:'#5a646f', gunTrim:'#2c2c2c', accessory:'cap' },
+    { hair:'#26211e', face:'#d8c4b1', hurt:'#efc0bf', coat:'#655a4f', legs:'#322d29', accent:'#8a7a68', detail:'#5e4f43', gunBody:'#7a7a7a', gunTrim:'#303030', accessory:'shoulder' },
+    { hair:'#1c1f1b', face:'#d0bdae', hurt:'#efc0bf', coat:'#4a5244', legs:'#262923', accent:'#66735e', detail:'#7f5e50', gunBody:'#545f66', gunTrim:'#2c2c2c', accessory:'mask' },
+    { hair:'#221d1f', face:'#d4c1b3', hurt:'#efc0bf', coat:'#564b53', legs:'#2e272c', accent:'#74636f', detail:'#8a796e', gunBody:'#7d614f', gunTrim:'#2c2c2c', accessory:'poncho' },
+    { hair:'#201d1b', face:'#d6c3b4', hurt:'#efc0bf', coat:'#5e5447', legs:'#2d2a25', accent:'#85735f', detail:'#5f666a', gunBody:'#5a646f', gunTrim:'#2c2c2c', accessory:'pack' },
+    { hair:'#1d2021', face:'#d3c2b6', hurt:'#efc0bf', coat:'#4d4f53', legs:'#28292d', accent:'#6e7278', detail:'#8a6d58', gunBody:'#7a7a7a', gunTrim:'#2c2c2c', accessory:'beanie' },
+  ];
+  function stableHashString(str){ let h = 2166136261; const s = String(str || 'player'); for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619);} return h >>> 0; }
+  function onlineAppearanceIndexFor(playerId, explicitIndex){ if(Number.isFinite(explicitIndex)) return ((explicitIndex % SURVIVOR_LOOKS.length) + SURVIVOR_LOOKS.length) % SURVIVOR_LOOKS.length; if(online.roomState && Array.isArray(online.roomState.players)){ const entry = online.roomState.players.find(p => p && p.id === playerId); if(entry && Number.isFinite(entry.appearanceIndex)) return ((entry.appearanceIndex % SURVIVOR_LOOKS.length) + SURVIVOR_LOOKS.length) % SURVIVOR_LOOKS.length; } return stableHashString(playerId || 'player') % SURVIVOR_LOOKS.length; }
+  function onlineAppearanceFor(playerId, explicitIndex){ return SURVIVOR_LOOKS[onlineAppearanceIndexFor(playerId, explicitIndex)] || SURVIVOR_LOOKS[0]; }
+  function drawSurvivorAccessory(x, y, faceDir, look, alive){ const accent = alive ? look.accent : '#666666'; const detail = alive ? look.detail : '#555555'; switch(look.accessory){ case 'hood': pxRect(x-7,y-10,14,3,accent); pxRect(x-7,y-8,2,4,accent); pxRect(x+5,y-8,2,4,accent); break; case 'bandolier': pxRect(x-5,y+3,2,7,accent); pxRect(x-2,y+2,2,7,detail); pxRect(x+1,y+1,2,7,accent); break; case 'cap': pxRect(x-7,y-10,14,3,accent); if(faceDir>0) pxRect(x+4,y-7,4,2,accent); else pxRect(x-8,y-7,4,2,accent); break; case 'shoulder': if(faceDir>0){ pxRect(x+4,y+1,5,4,accent); pxRect(x+4,y+5,4,2,detail); } else { pxRect(x-9,y+1,5,4,accent); pxRect(x-8,y+5,4,2,detail); } break; case 'mask': pxRect(x-4,y-2,8,3,accent); break; case 'poncho': pxRect(x-7,y+1,14,3,accent); pxRect(x-6,y+4,12,2,detail); break; case 'pack': if(faceDir>0) pxRect(x-8,y+2,3,9,accent); else pxRect(x+5,y+2,3,9,accent); break; case 'beanie': pxRect(x-6,y-10,12,3,accent); pxRect(x-2,y-11,4,2,detail); break; }}
+  function drawStyledSurvivorBody(x, y, baseX, baseY, look, opts){ const alive = !!opts.alive; const faceDir = (opts.faceDir||1)<0 ? -1 : 1; const weapon = opts.weapon || 'shotgun'; const weaponAng = Number.isFinite(opts.weaponAng) ? opts.weaponAng : (faceDir<0?Math.PI:0); const jumpVisual = opts.jumpVisual || { lift:0, shadowScale:1 }; const bodyColor = alive ? look.coat : '#545454'; const legsColor = alive ? look.legs : '#3c3c3c'; const faceColor = alive ? (opts.hurt ? look.hurt : look.face) : '#9a9a9a'; const hairColor = alive ? look.hair : '#666666'; const ember = alive ? '#ff7a1a' : '#8b8b8b'; const muzzleWood = alive ? look.detail : '#666666'; const gunBody = weapon==='gatling' ? '#545f66' : weapon==='rocket' ? '#5a646f' : weapon==='flamethrower' ? '#7a7a7a' : (look.gunBody || '#7d614f'); const gunTrim = look.gunTrim || '#2c2c2c'; pxRect(baseX-11*(jumpVisual.shadowScale||1),baseY+12,22*(jumpVisual.shadowScale||1),5,'rgba(0,0,0,0.2)'); if(opts.spinMode){ const spin = opts.spin || 0; ctx.save(); ctx.translate(x,y+3); ctx.rotate(spin); pxRect(-7,-6,14,5,hairColor); pxRect(-8,-3,16,7,faceColor); pxRect(6,-1,6,2,muzzleWood); pxRect(11,-1,2,2,ember); pxRect(-8,4,16,8,bodyColor); pxRect(-10,2,3,10,legsColor); pxRect(7,2,3,10,legsColor); if(look.accessory==='bandolier'){ pxRect(-5,4,2,7,alive?look.accent:'#666'); pxRect(-1,3,2,7,alive?look.detail:'#555'); pxRect(3,2,2,7,alive?look.accent:'#666'); } else if(look.accessory==='poncho'){ pxRect(-8,3,16,3,alive?look.accent:'#666'); } else if(look.accessory==='hood'){ pxRect(-8,-6,16,2,alive?look.accent:'#666'); } drawRotatedGun(0,4,spin,gunBody,gunTrim,weapon); ctx.restore(); return; } pxRect(x-6,y-8,12,10,faceColor); pxRect(x-6,y-10,12,3,hairColor); pxRect(x-5,y-6,10,3,'#0a0a0a'); drawSurvivorAccessory(x, y, faceDir, look, alive); if(faceDir>0){ pxRect(x+5,y-3,5,2,muzzleWood); pxRect(x+10,y-3,2,2,ember); } else { pxRect(x-10,y-3,5,2,muzzleWood); pxRect(x-12,y-3,2,2,ember); } pxRect(x-5,y+2,10,9,bodyColor); pxRect(x-7,y+10,4,6,legsColor); pxRect(x+3,y+10,4,6,legsColor); if(alive) drawRotatedGun(x,y+4,weaponAng,gunBody,gunTrim,weapon); }
+  function drawStyledLocalPlayer(cam){ const look = onlineAppearanceFor(online.clientId || state.playerName, player.onlineAppearanceIndex); const s=worldToScreen(player.x,player.y,cam),baseX=px(s.x),baseY=px(s.y); const jumpVisual=getPlayerJumpVisual(),lift=jumpVisual.lift; const x=baseX,y=px(baseY-lift); if(state.deathAnim>0){ const collapse=(1.4-state.deathAnim)/1.4; pxRect(baseX-8,baseY-2+collapse*10,16,4,'#7b1b1b'); pxRect(baseX-4,baseY+2+collapse*10,8,6,look.coat); return; } const worldMouseX=cam.x+state.mouse.x,worldMouseY=cam.y+state.mouse.y; const aimAng=Math.atan2(worldMouseY-player.y,worldMouseX-player.x); const mobileAimActive = MOBILE_MODE && touchState.aim.active && Math.hypot(touchState.aim.dx,touchState.aim.dy)>12; let weaponAng=aimAng; if(MOBILE_MODE && !mobileAimActive){ if(player.dashTime>0) weaponAng=player.dashFacing; else if(player.rocketJumpTime>0) weaponAng=Math.atan2(player.rocketJumpVY||0,player.rocketJumpVX||player.faceDir||1); else if(player.knockbackTime>0) weaponAng=Math.atan2(player.knockbackVY||0,player.knockbackVX||player.faceDir||1); else if(Math.hypot(touchState.move.dx,touchState.move.dy)>6) weaponAng=Math.atan2(touchState.move.dy,touchState.move.dx); else weaponAng=(player.faceDir||1)<0?Math.PI:0; } const moveAng=player.dashTime>0?player.dashFacing:player.rocketJumpTime>0?Math.atan2(player.rocketJumpVY||0,player.rocketJumpVX||1):weaponAng; if(player.dashTime>0||player.rocketJumpTime>0){ for(let i=3;i>=1;i--){ const trailX=x-Math.cos(moveAng)*i*7,trailY=y-Math.sin(moveAng)*i*7; ctx.fillStyle=`rgba(255,190,120,${0.09*i})`; ctx.fillRect(px(trailX-7),px(trailY-7),14,18); } } ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.font='12px Courier New'; ctx.textAlign='center'; ctx.fillText(state.playerName,x+1,y-15); ctx.fillStyle='#f0e6d8'; ctx.fillText(state.playerName,x,y-16); if(player.dashTime>0||player.rocketJumpTime>0){ const spinBase=player.dashTime>0?1-(player.dashTime/0.18):1-(player.rocketJumpTime/ROCKET_JUMP_DURATION); const spin=spinBase*Math.PI*2*player.dashSpinDir; drawStyledSurvivorBody(x,y,baseX,baseY,look,{alive:true,hurt:player.hurtTimer>0,faceDir:player.faceDir,weapon:player.weapon,weaponAng,spinMode:true,spin,jumpVisual}); return; } drawStyledSurvivorBody(x,y,baseX,baseY,look,{alive:true,hurt:player.hurtTimer>0,faceDir:player.faceDir,weapon:player.weapon,weaponAng,jumpVisual}); }
+
   const __origDrawPlayer = drawPlayer;
   drawPlayer = function(cam){
     if(online.connected && online.started && onlineIsMode()){
       for(const peer of Object.values(online.peers)) drawRemotePlayer(peer, cam);
+      return drawStyledLocalPlayer(cam);
     }
     return __origDrawPlayer(cam);
   };
@@ -1716,6 +1734,7 @@
     const jumpVisual=getRemoteJumpVisual(peer),lift=jumpVisual.lift;
     const x=baseX,y=px(baseY-lift);
     const alive = !!peer.alive && (peer.hp||0) > 0;
+    const look = onlineAppearanceFor(peer.id || peer.name, peer.appearanceIndex);
     const worldMouseAngle = Number.isFinite(peer.aimAngle) ? peer.aimAngle : (((peer.faceDir||1)<0)?Math.PI:0);
     let weaponAng = worldMouseAngle;
     const faceDir=(peer.faceDir||1)<0?-1:1;
@@ -1724,15 +1743,6 @@
     else if((peer.rocketJumpTime||0)>0) weaponAng = Math.atan2(peer.rocketJumpVY||0,peer.rocketJumpVX||peer.faceDir||1);
     else if((peer.knockbackTime||0)>0) weaponAng = Math.atan2(peer.knockbackVY||0,peer.knockbackVX||peer.faceDir||1);
     else weaponAng = (peer.faceDir||1)<0?Math.PI:worldMouseAngle;
-    const moveAng=(peer.dashTime||0)>0?dashFacing:(peer.rocketJumpTime||0)>0?Math.atan2(peer.rocketJumpVY||0,peer.rocketJumpVX||1):weaponAng;
-    pxRect(baseX-11*jumpVisual.shadowScale,baseY+12,22*jumpVisual.shadowScale,5,'rgba(0,0,0,0.2)');
-    if((peer.dashTime||0)>0 || (peer.rocketJumpTime||0)>0){
-      for(let i=3;i>=1;i--){
-        const trailX=x-Math.cos(moveAng)*i*7,trailY=y-Math.sin(moveAng)*i*7;
-        ctx.fillStyle=`rgba(255,190,120,${0.09*i})`;
-        ctx.fillRect(px(trailX-7),px(trailY-7),14,18);
-      }
-    }
     ctx.fillStyle='rgba(0,0,0,0.65)';
     ctx.font='12px Courier New';
     ctx.textAlign='center';
@@ -1743,29 +1753,9 @@
       const spinBase=(peer.dashTime||0)>0?1-((peer.dashTime||0)/0.18):1-((peer.rocketJumpTime||0)/ROCKET_JUMP_DURATION);
       const spinDir = Number.isFinite(peer.dashSpinDir) ? peer.dashSpinDir : (((peer.dashVX||0)<0)?-1:((peer.dashVX||0)>0?1:faceDir));
       const spin=spinBase*Math.PI*2*spinDir;
-      ctx.save();
-      ctx.translate(x,y+3);
-      ctx.rotate(spin);
-      pxRect(-7,-6,14,5,'#1c1a1a');
-      pxRect(-8,-3,16,7,alive?'#ddd4c7':'#9a9a9a');
-      pxRect(6,-1,6,2,'#6b3e1e');
-      pxRect(11,-1,2,2,alive?'#ff7a1a':'#8b8b8b');
-      pxRect(-8,4,16,8,alive?'#3c342f':'#545454');
-      pxRect(-10,2,3,10,alive?'#262626':'#3c3c3c');
-      pxRect(7,2,3,10,alive?'#262626':'#3c3c3c');
-      drawRotatedGun(0,4,spin, peer.weapon==='gatling'?'#545f66':peer.weapon==='rocket'?'#5a646f':peer.weapon==='flamethrower'?'#7a7a7a':'#7d614f', '#2c2c2c', peer.weapon||'shotgun');
-      ctx.restore();
+      drawStyledSurvivorBody(x,y,baseX,baseY,look,{alive,hurt:false,faceDir,weapon:peer.weapon,weaponAng,spinMode:true,spin,jumpVisual});
     }else{
-      const faceColor=alive?'#ddd4c7':'#9a9a9a';
-      pxRect(x-6,y-8,12,10,faceColor);
-      pxRect(x-6,y-10,12,3,'#1c1a1a');
-      pxRect(x-5,y-6,10,3,'#0a0a0a');
-      if(faceDir>0){pxRect(x+5,y-3,5,2,'#6b3e1e');pxRect(x+10,y-3,2,2,alive?'#ff7a1a':'#8b8b8b');}
-      else{pxRect(x-10,y-3,5,2,'#6b3e1e');pxRect(x-12,y-3,2,2,alive?'#ff7a1a':'#8b8b8b');}
-      pxRect(x-5,y+2,10,9,alive?'#3c342f':'#545454');
-      pxRect(x-7,y+10,4,6,alive?'#262626':'#3c3c3c');
-      pxRect(x+3,y+10,4,6,alive?'#262626':'#3c3c3c');
-      if(alive) drawRotatedGun(x,y+4,weaponAng, peer.weapon==='gatling'?'#545f66':peer.weapon==='rocket'?'#5a646f':peer.weapon==='flamethrower'?'#7a7a7a':'#7d614f', '#2c2c2c', peer.weapon||'shotgun');
+      drawStyledSurvivorBody(x,y,baseX,baseY,look,{alive,hurt:false,faceDir,weapon:peer.weapon,weaponAng,jumpVisual});
     }
     const barW=22, ratio=Math.max(0,Math.min(1,(peer.hp||0)/(peer.maxHp||100)));
     pxRect(x-barW/2,y-28,barW,4,'rgba(255,255,255,0.12)');

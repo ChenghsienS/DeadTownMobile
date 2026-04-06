@@ -7,6 +7,7 @@ const PORT = Number(process.env.PORT || 8080);
 const TICK_RATE = 60;
 const SNAPSHOT_RATE = 60;
 const ROOM_MAX_PLAYERS = 6;
+const ROOM_APPEARANCE_COUNT = 8;
 const MAX_ACTIVE_CLIENTS = 60;
 const WORLD = { w: 3600, h: 2400 };
 const ROCKET_JUMP_DURATION = 0.5;
@@ -444,6 +445,18 @@ function reserveKeyForWeapon(weapon) {
   if (weapon === 'flamethrower') return 'flameAmmo';
   return null;
 }
+
+function pickRoomAppearanceIndex(room) {
+  const used = new Set();
+  for (const c of room.players.values()) {
+    if (Number.isInteger(c.appearanceIndex)) used.add(c.appearanceIndex);
+  }
+  const free = [];
+  for (let i = 0; i < ROOM_APPEARANCE_COUNT; i += 1) if (!used.has(i)) free.push(i);
+  if (free.length > 0) return free[Math.floor(Math.random() * free.length)];
+  return Math.floor(Math.random() * ROOM_APPEARANCE_COUNT);
+}
+
 function createRoom(hostClient, roomName) {
   const room = {
     roomId: `room_${String(nextRoomNum++).padStart(4, '0')}`,
@@ -467,6 +480,7 @@ function createRoom(hostClient, roomName) {
 function addClientToRoom(client, room) {
   client.roomId = room.roomId;
   client.ready = false;
+  client.appearanceIndex = pickRoomAppearanceIndex(room);
   room.players.set(client.id, client);
 }
 function removeClientFromRoom(client, opts = {}) {
@@ -478,6 +492,7 @@ function removeClientFromRoom(client, opts = {}) {
   room.players.delete(client.id);
   client.roomId = null;
   client.ready = false;
+  client.appearanceIndex = null;
   if (room.match && room.match.playersById) room.match.playersById.delete(client.id);
   if (room.players.size === 0) {
     rooms.delete(room.roomId);
@@ -506,6 +521,7 @@ function roomPublicState(room) {
     id: client.id,
     name: client.name,
     ready: !!client.ready,
+    appearanceIndex: Number.isInteger(client.appearanceIndex) ? client.appearanceIndex : 0,
   }));
   return {
     roomId: room.roomId,
@@ -1682,14 +1698,6 @@ function updatePlayerFromClient(client, state) {
   const player = room.match.playersById.get(client.id);
   if (!player || !player.alive) return;
   if (typeof state.name === 'string' && state.name.trim()) client.name = state.name.trim().slice(0, 18);
-
-  const hasSeq = Number.isFinite(state.seq);
-  const incomingSeq = hasSeq ? Math.floor(Number(state.seq) || 0) : null;
-  const currentSeq = player.lastInputSeq || 0;
-  const staleState = hasSeq && incomingSeq < currentSeq;
-  if (staleState) return;
-  if (hasSeq) player.lastInputSeq = incomingSeq;
-
   const incomingDashTime = Number.isFinite(state.dashTime) ? Math.max(0, Number(state.dashTime) || 0) : 0;
   if (incomingDashTime > 0.12 && (player.dashTime || 0) <= 0.02) pushSoundFx(room, 'dash', player.x, player.y, { ownerId: player.id });
   if (Number.isFinite(state.dashTime)) player.dashTime = Math.max(player.dashTime || 0, incomingDashTime);
@@ -1697,6 +1705,7 @@ function updatePlayerFromClient(client, state) {
   if (Number.isFinite(state.dashVY)) player.dashVY = Number(state.dashVY) || 0;
   if (Number.isFinite(state.dashFacing)) player.dashFacing = Number(state.dashFacing) || 0;
   if (Number.isFinite(state.dashSpinDir)) player.dashSpinDir = (Number(state.dashSpinDir) || 0) < 0 ? -1 : 1;
+  if (Number.isFinite(state.seq)) player.lastInputSeq = Math.max(player.lastInputSeq || 0, Math.floor(Number(state.seq) || 0));
   if (!(player.carryingByCharger || (player.knockbackTime || 0) > 0) && Number.isFinite(state.x) && Number.isFinite(state.y)) {
     player.x = clamp(Number(state.x), player.radius + 2, WORLD.w - (player.radius + 2));
     player.y = clamp(Number(state.y), player.radius + 2, WORLD.h - (player.radius + 2));
@@ -1745,6 +1754,7 @@ function snapshotForClient(room, client) {
     zombiePushTime: p.zombiePushTime || 0,
     inputSeq: p.id === client.id ? (p.lastInputSeq || 0) : undefined,
     alive: p.alive,
+    appearanceIndex: Number.isInteger(clients.get(p.id)?.appearanceIndex) ? clients.get(p.id).appearanceIndex : 0,
     buffAnnouncement: p.id === client.id ? p.buffAnnouncement : '',
     buffAnnouncementTimer: p.id === client.id ? p.buffAnnouncementTimer : 0,
   }));
