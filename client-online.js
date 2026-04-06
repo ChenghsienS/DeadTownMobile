@@ -1761,9 +1761,10 @@
   function carveRadialLight(tctx, sx, sy, innerR, outerR, strength){
     const s = Math.max(0, Math.min(1, strength == null ? 1 : strength));
     const grad = tctx.createRadialGradient(sx, sy, Math.max(0, innerR), sx, sy, Math.max(innerR + 1, outerR));
-    grad.addColorStop(0, `rgba(0,0,0,${(0.95 * s).toFixed(3)})`);
-    grad.addColorStop(0.28, `rgba(0,0,0,${(0.72 * s).toFixed(3)})`);
-    grad.addColorStop(0.70, `rgba(0,0,0,${(0.26 * s).toFixed(3)})`);
+    grad.addColorStop(0, `rgba(0,0,0,${(0.98 * s).toFixed(3)})`);
+    grad.addColorStop(0.18, `rgba(0,0,0,${(0.88 * s).toFixed(3)})`);
+    grad.addColorStop(0.52, `rgba(0,0,0,${(0.42 * s).toFixed(3)})`);
+    grad.addColorStop(0.82, `rgba(0,0,0,${(0.12 * s).toFixed(3)})`);
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     tctx.fillStyle = grad;
     tctx.beginPath();
@@ -1772,26 +1773,35 @@
   }
 
   function carveProjectileLights(tctx, cam){
+    const flickerTime = performance.now() * 0.001;
     for(const zone of state.fireZones || []){
       const s = worldToScreen(zone.x, zone.y, cam);
-      carveRadialLight(tctx, s.x, s.y, 8, Math.max(72, (zone.radius || 96) * 1.2), 1.0);
+      const phase = (zone.id || 0) * 0.73;
+      const flicker = 0.9 + Math.sin(flickerTime * 8.5 + phase) * 0.08 + Math.sin(flickerTime * 17.0 + phase * 1.7) * 0.04;
+      const outer = Math.max(96, (zone.radius || 96) * 1.35 * flicker);
+      carveRadialLight(tctx, s.x, s.y, 10, outer, 1.0);
+      carveRadialLight(tctx, s.x, s.y, 4, outer * 0.58, 1.0);
     }
 
     for(const e of state.explosions || []){
       const s = worldToScreen(e.x || 0, e.y || 0, cam);
-      const boost = e.rocket ? 1.0 : (e.molotov ? 0.86 : 0.92);
-      const outer = Math.max(44, (e.radius || e.maxRadius || 64) * (e.rocket ? 1.18 : 0.96));
-      carveRadialLight(tctx, s.x, s.y, 6, outer, boost);
+      const lifeRatio = Math.max(0, Math.min(1, (e.life || 0) / Math.max(0.001, e.maxLife || 1)));
+      const flash = Math.min(1, lifeRatio * 4.5);
+      if(flash <= 0.02) continue;
+      const baseOuter = e.rocket ? 220 : (e.molotov ? 130 : 180);
+      carveRadialLight(tctx, s.x, s.y, 8, baseOuter, flash);
+      carveRadialLight(tctx, s.x, s.y, 2, baseOuter * 0.48, Math.min(1, flash * 1.2));
     }
 
     for(const r of state.rockets || []){
       const s = worldToScreen(r.x || 0, r.y || 0, cam);
-      carveRadialLight(tctx, s.x, s.y, 2, 24, 0.72);
+      carveRadialLight(tctx, s.x, s.y, 2, 34, 0.9);
       const vx = r.vx || 0, vy = r.vy || 0;
       const mag = Math.hypot(vx, vy) || 1;
-      const tailX = s.x - (vx / mag) * 12;
-      const tailY = s.y - (vy / mag) * 12;
-      carveRadialLight(tctx, tailX, tailY, 1, 18, 0.58);
+      const tailX = s.x - (vx / mag) * 14;
+      const tailY = s.y - (vy / mag) * 14;
+      carveRadialLight(tctx, tailX, tailY, 1, 28, 0.78);
+      carveRadialLight(tctx, tailX, tailY, 0, 16, 0.92);
     }
 
     const flameList = state.flameParticles || [];
@@ -1800,7 +1810,7 @@
     for(let i = 0; i < flameList.length; i += stride){
       const f = flameList[i];
       const s = worldToScreen(f.x || 0, f.y || 0, cam);
-      carveRadialLight(tctx, s.x, s.y, 1, Math.max(10, (f.size || 5) * 3.2), 0.34);
+      carveRadialLight(tctx, s.x, s.y, 1, Math.max(14, (f.size || 5) * 4.0), 0.42);
     }
   }
   drawFog = function(cam){
