@@ -1682,6 +1682,14 @@ function updatePlayerFromClient(client, state) {
   const player = room.match.playersById.get(client.id);
   if (!player || !player.alive) return;
   if (typeof state.name === 'string' && state.name.trim()) client.name = state.name.trim().slice(0, 18);
+
+  const hasSeq = Number.isFinite(state.seq);
+  const incomingSeq = hasSeq ? Math.floor(Number(state.seq) || 0) : null;
+  const currentSeq = player.lastInputSeq || 0;
+  const staleState = hasSeq && incomingSeq < currentSeq;
+  if (staleState) return;
+  if (hasSeq) player.lastInputSeq = incomingSeq;
+
   const incomingDashTime = Number.isFinite(state.dashTime) ? Math.max(0, Number(state.dashTime) || 0) : 0;
   if (incomingDashTime > 0.12 && (player.dashTime || 0) <= 0.02) pushSoundFx(room, 'dash', player.x, player.y, { ownerId: player.id });
   if (Number.isFinite(state.dashTime)) player.dashTime = Math.max(player.dashTime || 0, incomingDashTime);
@@ -1689,7 +1697,6 @@ function updatePlayerFromClient(client, state) {
   if (Number.isFinite(state.dashVY)) player.dashVY = Number(state.dashVY) || 0;
   if (Number.isFinite(state.dashFacing)) player.dashFacing = Number(state.dashFacing) || 0;
   if (Number.isFinite(state.dashSpinDir)) player.dashSpinDir = (Number(state.dashSpinDir) || 0) < 0 ? -1 : 1;
-  if (Number.isFinite(state.seq)) player.lastInputSeq = Math.max(player.lastInputSeq || 0, Math.floor(Number(state.seq) || 0));
   if (!(player.carryingByCharger || (player.knockbackTime || 0) > 0) && Number.isFinite(state.x) && Number.isFinite(state.y)) {
     player.x = clamp(Number(state.x), player.radius + 2, WORLD.w - (player.radius + 2));
     player.y = clamp(Number(state.y), player.radius + 2, WORLD.h - (player.radius + 2));

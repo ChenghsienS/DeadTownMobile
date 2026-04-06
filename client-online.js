@@ -1442,9 +1442,11 @@
     if(online.sendTimer<=0){
       online.sendTimer = 1/60;
       if(!spectating){
+        online.localStateSeq = (online.localStateSeq || 0) + 1;
         onlineSend({
           type:'player_state',
           state:{
+            seq: online.localStateSeq,
             x:player.x,
             y:player.y,
             faceDir:player.faceDir,
