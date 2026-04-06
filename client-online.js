@@ -1694,11 +1694,11 @@
     const farW = opts && opts.farW || 250;
     const halo = opts && opts.halo || 92;
 
-    const baseHalo = halo * 0.40;
-    const haloGrad = tctx.createRadialGradient(sx, sy, 6, sx, sy, baseHalo);
-    haloGrad.addColorStop(0, 'rgba(0,0,0,0.96)');
-    haloGrad.addColorStop(0.34, 'rgba(0,0,0,0.82)');
-    haloGrad.addColorStop(0.70, 'rgba(0,0,0,0.34)');
+    const baseHalo = halo * 0.50;
+    const haloGrad = tctx.createRadialGradient(sx, sy, 8, sx, sy, baseHalo);
+    haloGrad.addColorStop(0, 'rgba(0,0,0,0.98)');
+    haloGrad.addColorStop(0.26, 'rgba(0,0,0,0.88)');
+    haloGrad.addColorStop(0.58, 'rgba(0,0,0,0.42)');
     haloGrad.addColorStop(1, 'rgba(0,0,0,0)');
     tctx.fillStyle = haloGrad;
     tctx.beginPath();
@@ -1709,48 +1709,45 @@
     tctx.translate(sx, sy);
     tctx.rotate(ang);
 
-    const beamWidthScale = 1.25;
-    const beamFarW = farW * 1.16 * beamWidthScale;
-    const mouthX = 2;
-    const mouthHalfH = nearW * 0.19 * 1.10;
-    const midX = length * 0.44;
+    const beamFarW = farW * 1.755;
+    const mouthX = 12;
+    const mouthHalfH = nearW * 0.34;
+    const midX = length * 0.42;
     const farX = length;
-    const capDepth = length * 0.045;
-    const midHalfH = beamFarW * 0.34;
-    const farHalfH = beamFarW * 0.49;
-    const apertureRx = 5.5;
-    const apertureRy = mouthHalfH * 1.02;
+    const capDepth = length * 0.06;
+    const midHalfH = beamFarW * 0.36;
+    const farHalfH = beamFarW * 0.58;
 
     const softGrad = tctx.createLinearGradient(0, 0, length, 0);
-    softGrad.addColorStop(0, 'rgba(0,0,0,0.70)');
-    softGrad.addColorStop(0.22, 'rgba(0,0,0,0.46)');
-    softGrad.addColorStop(0.70, 'rgba(0,0,0,0.18)');
+    softGrad.addColorStop(0, 'rgba(0,0,0,0.74)');
+    softGrad.addColorStop(0.20, 'rgba(0,0,0,0.48)');
+    softGrad.addColorStop(0.66, 'rgba(0,0,0,0.18)');
     softGrad.addColorStop(1, 'rgba(0,0,0,0)');
     tctx.fillStyle = softGrad;
     tctx.beginPath();
     tctx.moveTo(mouthX, -mouthHalfH);
-    tctx.bezierCurveTo(midX * 0.26, -midHalfH * 0.52, farX - capDepth, -farHalfH * 0.92, farX, -farHalfH);
-    tctx.quadraticCurveTo(farX + capDepth * 0.05, 0, farX, farHalfH);
-    tctx.bezierCurveTo(farX - capDepth, farHalfH * 0.92, midX * 0.26, midHalfH * 0.52, mouthX, mouthHalfH);
-    tctx.quadraticCurveTo(-apertureRx * 0.85, apertureRy * 0.72, -apertureRx, 0);
-    tctx.quadraticCurveTo(-apertureRx * 0.85, -apertureRy * 0.72, mouthX, -mouthHalfH);
+    tctx.bezierCurveTo(mouthX * 0.20, -mouthHalfH * 1.90, -baseHalo * 0.10, -mouthHalfH * 0.68, -baseHalo * 0.18, 0);
+    tctx.bezierCurveTo(-baseHalo * 0.10, mouthHalfH * 0.68, mouthX * 0.20, mouthHalfH * 1.90, mouthX, mouthHalfH);
+    tctx.bezierCurveTo(midX * 0.46, farHalfH * 0.72, farX - capDepth, farHalfH * 0.94, farX, farHalfH);
+    tctx.quadraticCurveTo(farX + capDepth * 0.08, 0, farX, -farHalfH);
+    tctx.bezierCurveTo(farX - capDepth, -farHalfH * 0.94, midX * 0.46, -farHalfH * 0.72, mouthX, -mouthHalfH);
     tctx.closePath();
     tctx.fill();
 
     const coreGrad = tctx.createLinearGradient(0, 0, length * 0.95, 0);
     coreGrad.addColorStop(0, 'rgba(0,0,0,0.98)');
-    coreGrad.addColorStop(0.12, 'rgba(0,0,0,0.88)');
-    coreGrad.addColorStop(0.52, 'rgba(0,0,0,0.38)');
-    coreGrad.addColorStop(0.90, 'rgba(0,0,0,0.08)');
+    coreGrad.addColorStop(0.12, 'rgba(0,0,0,0.90)');
+    coreGrad.addColorStop(0.50, 'rgba(0,0,0,0.40)');
+    coreGrad.addColorStop(0.88, 'rgba(0,0,0,0.08)');
     coreGrad.addColorStop(1, 'rgba(0,0,0,0)');
     tctx.fillStyle = coreGrad;
     tctx.beginPath();
-    tctx.moveTo(mouthX + 0.5, -mouthHalfH * 0.56);
-    tctx.bezierCurveTo(midX * 0.24, -midHalfH * 0.40, farX - capDepth * 0.8, -farHalfH * 0.66, farX, -farHalfH * 0.72);
-    tctx.quadraticCurveTo(farX + capDepth * 0.03, 0, farX, farHalfH * 0.72);
-    tctx.bezierCurveTo(farX - capDepth * 0.8, farHalfH * 0.66, midX * 0.24, midHalfH * 0.40, mouthX + 0.5, mouthHalfH * 0.56);
-    tctx.quadraticCurveTo(-apertureRx * 0.55, apertureRy * 0.48, -apertureRx * 0.62, 0);
-    tctx.quadraticCurveTo(-apertureRx * 0.55, -apertureRy * 0.48, mouthX + 0.5, -mouthHalfH * 0.56);
+    tctx.moveTo(mouthX + 2, -mouthHalfH * 0.50);
+    tctx.bezierCurveTo(mouthX * 0.38, -mouthHalfH * 1.10, -baseHalo * 0.02, -mouthHalfH * 0.26, 0, 0);
+    tctx.bezierCurveTo(-baseHalo * 0.02, mouthHalfH * 0.26, mouthX * 0.38, mouthHalfH * 1.10, mouthX + 2, mouthHalfH * 0.50);
+    tctx.bezierCurveTo(midX * 0.50, midHalfH * 0.60, farX - capDepth * 0.85, farHalfH * 0.66, farX, farHalfH * 0.74);
+    tctx.quadraticCurveTo(farX + capDepth * 0.04, 0, farX, -farHalfH * 0.74);
+    tctx.bezierCurveTo(farX - capDepth * 0.85, -farHalfH * 0.66, midX * 0.50, -midHalfH * 0.60, mouthX + 2, -mouthHalfH * 0.50);
     tctx.closePath();
     tctx.fill();
 
@@ -1770,7 +1767,7 @@
     tctx.globalCompositeOperation = 'destination-out';
 
     const selfPos = worldToScreen(player.x, player.y, cam);
-    carveFlashlight(tctx, selfPos.x, selfPos.y, localFlashlightAngle(cam), { length: 560, nearW: 60, farW: 230, halo: 96 });
+    carveFlashlight(tctx, selfPos.x, selfPos.y, localFlashlightAngle(cam), { length: 476, nearW: 81, farW: 311, halo: 96 });
 
     if(online.connected && online.started && onlineIsMode()){
       for(const peer of Object.values(online.peers || {})){
@@ -1778,7 +1775,7 @@
         const pxv = Number.isFinite(peer.displayX) ? peer.displayX : (peer.x || 0);
         const pyv = Number.isFinite(peer.displayY) ? peer.displayY : (peer.y || 0);
         const s = worldToScreen(pxv, pyv, cam);
-        carveFlashlight(tctx, s.x, s.y, peerFlashlightAngle(peer), { length: 560, nearW: 60, farW: 230, halo: 88 });
+        carveFlashlight(tctx, s.x, s.y, peerFlashlightAngle(peer), { length: 476, nearW: 81, farW: 311, halo: 88 });
       }
     }
     tctx.globalCompositeOperation = 'source-over';
