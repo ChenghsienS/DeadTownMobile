@@ -157,6 +157,7 @@
     selfAlive: true,
     matchSummary: null,
     matchOverMessage: '',
+    syncGraceTime: 0,
   };
   window.deadtownOnline = online;
 
@@ -420,20 +421,30 @@
     const carriedByCharger = !!self.carryingByCharger;
     const serverZombiePush = (self.zombiePushTime||0) > 0.02;
     const inBurstMove = (player.dashTime||0) > 0 || (player.rocketJumpTime||0) > 0 || (player.knockbackTime||0) > 0;
+    const localActing = !!(player.dashTime||0) || !!mouseDown || !!(typeof touchState === 'object' && touchState && touchState.shootHeld) || !!(state.keys && (state.keys.has('w') || state.keys.has('a') || state.keys.has('s') || state.keys.has('d') || state.keys.has('arrowup') || state.keys.has('arrowleft') || state.keys.has('arrowdown') || state.keys.has('arrowright')));
     if(!state.running || error > 96 || carriedByCharger || serverKnockback){
       player.x = self.x;
       player.y = self.y;
+    }else if((online.syncGraceTime||0) > 0){
+      if(error > 72){
+        player.x = self.x;
+        player.y = self.y;
+      }
     }else if(serverZombiePush){
       if(error > 64){
         player.x = self.x;
         player.y = self.y;
-      }else if(error > 4){
-        player.x += dx * 0.38;
-        player.y += dy * 0.38;
+      }else if(error > 6){
+        player.x += dx * 0.26;
+        player.y += dy * 0.26;
       }
-    }else if(!inBurstMove && error > 14){
-      player.x += dx * 0.18;
-      player.y += dy * 0.18;
+    }else if(!inBurstMove){
+      const movingThreshold = localActing ? 26 : 14;
+      const movingLerp = localActing ? 0.10 : 0.18;
+      if(error > movingThreshold){
+        player.x += dx * movingLerp;
+        player.y += dy * movingLerp;
+      }
     }
     player.zombiePushTime = Math.max(player.zombiePushTime||0, self.zombiePushTime||0);
     player.hp = self.hp;
@@ -494,6 +505,7 @@
       onlineSetSpectating(false);
     online.matchSummary = null;
     online.matchOverMessage = '';
+    online.syncGraceTime = 0;
     }
     online.lastServerHp = self.hp;
   }
@@ -666,6 +678,7 @@
       online.gameMode = 'online';
       onlineSetSpectating(false);
       online.worldSeed = Number.isInteger(msg.worldSeed) ? msg.worldSeed : 12345;
+      online.syncGraceTime = 0.5;
       pushOnlineNotice(ot().onlineStartInfo, 'info');
       resetGame();
       state.pellets = [];
@@ -950,6 +963,7 @@
     onlineSetSpectating(false);
     online.matchSummary = null;
     online.matchOverMessage = '';
+    online.syncGraceTime = 0;
     online.gameMode = 'single';
     return __origGoToMainMenu();
   };
@@ -1132,6 +1146,19 @@
       const r=state.rockets[i];
       const prevX=r.x,prevY=r.y;
       r.x+=r.vx*dt; r.y+=r.vy*dt; r.life-=dt;
+      for(let t=0;t<2;t++){
+        state.particles.push({
+          x:r.x-r.vx*0.01*t+rand(-1.5,1.5),
+          y:r.y-r.vy*0.01*t+rand(-1.5,1.5),
+          vx:rand(-12,12),
+          vy:rand(-12,12),
+          life:rand(0.18,0.3),
+          maxLife:0.3,
+          size:rand(2,4),
+          color:Math.random()>0.5?'rgba(255,180,90,0.75)':'rgba(80,80,80,0.5)',
+          drag:0.95
+        });
+      }
       let done=dist(r.x,r.y,r.targetX,r.targetY)<14||r.life<=0||r.x<0||r.y<0||r.x>WORLD.w||r.y>WORLD.h;
       if(!done){
         for(const b of WORLD.buildings){
@@ -1202,6 +1229,7 @@
     if(!state.running) return;
     if(state.paused) return;
     state.time += dt;
+    online.syncGraceTime = Math.max(0, (online.syncGraceTime||0) - dt);
     state.buffAnnouncementTimer=Math.max(0,state.buffAnnouncementTimer-dt);
     state.cameraShake=Math.max(0,state.cameraShake-dt*18);
     state.screenFlash=Math.max(0,state.screenFlash-dt*1.2);
