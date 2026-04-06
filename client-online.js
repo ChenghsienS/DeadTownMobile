@@ -1714,6 +1714,7 @@
     const mouthHalfH = nearW * 0.34;
     const midX = length * 0.42;
     const farX = length;
+    const capDepth = length * 0.06;
     const midHalfH = beamFarW * 0.36;
     const farHalfH = beamFarW * 0.58;
 
@@ -1727,9 +1728,9 @@
     tctx.moveTo(mouthX, -mouthHalfH);
     tctx.bezierCurveTo(mouthX * 0.20, -mouthHalfH * 1.90, -baseHalo * 0.10, -mouthHalfH * 0.68, -baseHalo * 0.18, 0);
     tctx.bezierCurveTo(-baseHalo * 0.10, mouthHalfH * 0.68, mouthX * 0.20, mouthHalfH * 1.90, mouthX, mouthHalfH);
-    tctx.bezierCurveTo(midX * 0.42, farHalfH * 0.78, midX * 0.78, midHalfH * 1.12, farX, farHalfH);
-    tctx.lineTo(farX, -farHalfH);
-    tctx.bezierCurveTo(midX * 0.78, -midHalfH * 1.12, midX * 0.42, -farHalfH * 0.78, mouthX, -mouthHalfH);
+    tctx.bezierCurveTo(midX * 0.46, farHalfH * 0.72, farX - capDepth, farHalfH * 0.94, farX, farHalfH);
+    tctx.quadraticCurveTo(farX + capDepth * 0.08, 0, farX, -farHalfH);
+    tctx.bezierCurveTo(farX - capDepth, -farHalfH * 0.94, midX * 0.46, -farHalfH * 0.72, mouthX, -mouthHalfH);
     tctx.closePath();
     tctx.fill();
 
@@ -1744,9 +1745,9 @@
     tctx.moveTo(mouthX + 2, -mouthHalfH * 0.50);
     tctx.bezierCurveTo(mouthX * 0.38, -mouthHalfH * 1.10, -baseHalo * 0.02, -mouthHalfH * 0.26, 0, 0);
     tctx.bezierCurveTo(-baseHalo * 0.02, mouthHalfH * 0.26, mouthX * 0.38, mouthHalfH * 1.10, mouthX + 2, mouthHalfH * 0.50);
-    tctx.bezierCurveTo(midX * 0.46, midHalfH * 0.64, farX * 0.82, farHalfH * 0.56, farX, farHalfH * 0.74);
-    tctx.lineTo(farX, -farHalfH * 0.74);
-    tctx.bezierCurveTo(farX * 0.82, -farHalfH * 0.56, midX * 0.46, -midHalfH * 0.64, mouthX + 2, -mouthHalfH * 0.50);
+    tctx.bezierCurveTo(midX * 0.50, midHalfH * 0.60, farX - capDepth * 0.85, farHalfH * 0.66, farX, farHalfH * 0.74);
+    tctx.quadraticCurveTo(farX + capDepth * 0.04, 0, farX, -farHalfH * 0.74);
+    tctx.bezierCurveTo(farX - capDepth * 0.85, -farHalfH * 0.66, midX * 0.50, -midHalfH * 0.60, mouthX + 2, -mouthHalfH * 0.50);
     tctx.closePath();
     tctx.fill();
 
