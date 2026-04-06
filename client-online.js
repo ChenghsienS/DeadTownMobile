@@ -1690,51 +1690,64 @@
 
   function carveFlashlight(tctx, sx, sy, ang, opts){
     const length = opts && opts.length || 520;
-    const nearW = opts && opts.nearW || 52;
-    const farW = opts && opts.farW || 170;
+    const nearW = opts && opts.nearW || 64;
+    const farW = opts && opts.farW || 250;
     const halo = opts && opts.halo || 92;
 
-    const haloGrad = tctx.createRadialGradient(sx, sy, 12, sx, sy, halo);
+    const haloGrad = tctx.createRadialGradient(sx, sy, 14, sx, sy, halo);
     haloGrad.addColorStop(0, 'rgba(0,0,0,0.98)');
-    haloGrad.addColorStop(0.35, 'rgba(0,0,0,0.76)');
+    haloGrad.addColorStop(0.42, 'rgba(0,0,0,0.72)');
     haloGrad.addColorStop(1, 'rgba(0,0,0,0)');
     tctx.fillStyle = haloGrad;
     tctx.beginPath();
-    tctx.arc(sx, sy, halo, 0, Math.PI * 2);
+    tctx.ellipse(sx, sy, halo * 0.9, halo * 0.7, ang, 0, Math.PI * 2);
     tctx.fill();
 
     tctx.save();
     tctx.translate(sx, sy);
     tctx.rotate(ang);
 
-    const softGrad = tctx.createLinearGradient(0, 0, length * 0.92, 0);
-    softGrad.addColorStop(0, 'rgba(0,0,0,0.68)');
-    softGrad.addColorStop(0.28, 'rgba(0,0,0,0.46)');
-    softGrad.addColorStop(0.72, 'rgba(0,0,0,0.18)');
+    const mouthX = 10;
+    const mouthHalfH = nearW * 0.55;
+    const midX = length * 0.42;
+    const farX = length;
+    const midHalfH = farW * 0.42;
+    const farHalfH = farW * 0.62;
+
+    const softGrad = tctx.createLinearGradient(0, 0, length, 0);
+    softGrad.addColorStop(0, 'rgba(0,0,0,0.74)');
+    softGrad.addColorStop(0.25, 'rgba(0,0,0,0.48)');
+    softGrad.addColorStop(0.7, 'rgba(0,0,0,0.18)');
     softGrad.addColorStop(1, 'rgba(0,0,0,0)');
     tctx.fillStyle = softGrad;
     tctx.beginPath();
-    tctx.moveTo(4, -nearW * 0.92);
-    tctx.lineTo(length * 0.42, -farW * 0.58);
-    tctx.quadraticCurveTo(length * 0.86, -farW * 0.88, length, 0);
-    tctx.quadraticCurveTo(length * 0.86, farW * 0.88, length * 0.42, farW * 0.58);
-    tctx.lineTo(4, nearW * 0.92);
+    tctx.moveTo(mouthX, -mouthHalfH);
+    tctx.quadraticCurveTo(mouthX * 0.2, -mouthHalfH * 1.45, 0, 0);
+    tctx.quadraticCurveTo(mouthX * 0.2, mouthHalfH * 1.45, mouthX, mouthHalfH);
+    tctx.quadraticCurveTo(midX * 0.55, farHalfH * 0.82, midX, midHalfH);
+    tctx.quadraticCurveTo(farX * 0.92, farHalfH, farX, farHalfH);
+    tctx.lineTo(farX, -farHalfH);
+    tctx.quadraticCurveTo(farX * 0.92, -farHalfH, midX, -midHalfH);
+    tctx.quadraticCurveTo(midX * 0.55, -farHalfH * 0.82, mouthX, -mouthHalfH);
     tctx.closePath();
     tctx.fill();
 
-    const coreGrad = tctx.createLinearGradient(0, 0, length, 0);
-    coreGrad.addColorStop(0, 'rgba(0,0,0,0.96)');
+    const coreGrad = tctx.createLinearGradient(0, 0, length * 0.9, 0);
+    coreGrad.addColorStop(0, 'rgba(0,0,0,0.97)');
     coreGrad.addColorStop(0.18, 'rgba(0,0,0,0.88)');
-    coreGrad.addColorStop(0.55, 'rgba(0,0,0,0.55)');
-    coreGrad.addColorStop(0.9, 'rgba(0,0,0,0.12)');
+    coreGrad.addColorStop(0.52, 'rgba(0,0,0,0.50)');
+    coreGrad.addColorStop(0.86, 'rgba(0,0,0,0.10)');
     coreGrad.addColorStop(1, 'rgba(0,0,0,0)');
     tctx.fillStyle = coreGrad;
     tctx.beginPath();
-    tctx.moveTo(8, -nearW * 0.52);
-    tctx.lineTo(length * 0.34, -farW * 0.26);
-    tctx.quadraticCurveTo(length * 0.82, -farW * 0.42, length * 0.96, 0);
-    tctx.quadraticCurveTo(length * 0.82, farW * 0.42, length * 0.34, farW * 0.26);
-    tctx.lineTo(8, nearW * 0.52);
+    tctx.moveTo(mouthX + 6, -mouthHalfH * 0.6);
+    tctx.quadraticCurveTo(mouthX * 0.4, -mouthHalfH, 2, 0);
+    tctx.quadraticCurveTo(mouthX * 0.4, mouthHalfH, mouthX + 6, mouthHalfH * 0.6);
+    tctx.quadraticCurveTo(midX * 0.52, midHalfH * 0.72, farX * 0.88, farHalfH * 0.58);
+    tctx.quadraticCurveTo(farX * 0.97, farHalfH * 0.5, farX, farHalfH * 0.46);
+    tctx.lineTo(farX, -farHalfH * 0.46);
+    tctx.quadraticCurveTo(farX * 0.97, -farHalfH * 0.5, farX * 0.88, -farHalfH * 0.58);
+    tctx.quadraticCurveTo(midX * 0.52, -midHalfH * 0.72, mouthX + 6, -mouthHalfH * 0.6);
     tctx.closePath();
     tctx.fill();
 
@@ -1754,7 +1767,7 @@
     tctx.globalCompositeOperation = 'destination-out';
 
     const selfPos = worldToScreen(player.x, player.y, cam);
-    carveFlashlight(tctx, selfPos.x, selfPos.y, localFlashlightAngle(cam), { length: 560, nearW: 50, farW: 165, halo: 96 });
+    carveFlashlight(tctx, selfPos.x, selfPos.y, localFlashlightAngle(cam), { length: 560, nearW: 60, farW: 230, halo: 96 });
 
     if(online.connected && online.started && onlineIsMode()){
       for(const peer of Object.values(online.peers || {})){
@@ -1762,7 +1775,7 @@
         const pxv = Number.isFinite(peer.displayX) ? peer.displayX : (peer.x || 0);
         const pyv = Number.isFinite(peer.displayY) ? peer.displayY : (peer.y || 0);
         const s = worldToScreen(pxv, pyv, cam);
-        carveFlashlight(tctx, s.x, s.y, peerFlashlightAngle(peer), { length: 560, nearW: 50, farW: 165, halo: 88 });
+        carveFlashlight(tctx, s.x, s.y, peerFlashlightAngle(peer), { length: 560, nearW: 60, farW: 230, halo: 88 });
       }
     }
     tctx.globalCompositeOperation = 'source-over';
