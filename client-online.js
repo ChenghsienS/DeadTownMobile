@@ -1757,6 +1757,52 @@
     tctx.restore();
   }
 
+
+  function carveRadialLight(tctx, sx, sy, innerR, outerR, strength){
+    const s = Math.max(0, Math.min(1, strength == null ? 1 : strength));
+    const grad = tctx.createRadialGradient(sx, sy, Math.max(0, innerR), sx, sy, Math.max(innerR + 1, outerR));
+    grad.addColorStop(0, `rgba(0,0,0,${(0.95 * s).toFixed(3)})`);
+    grad.addColorStop(0.28, `rgba(0,0,0,${(0.72 * s).toFixed(3)})`);
+    grad.addColorStop(0.70, `rgba(0,0,0,${(0.26 * s).toFixed(3)})`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    tctx.fillStyle = grad;
+    tctx.beginPath();
+    tctx.arc(sx, sy, outerR, 0, Math.PI * 2);
+    tctx.fill();
+  }
+
+  function carveProjectileLights(tctx, cam){
+    for(const zone of state.fireZones || []){
+      const s = worldToScreen(zone.x, zone.y, cam);
+      carveRadialLight(tctx, s.x, s.y, 8, Math.max(72, (zone.radius || 96) * 1.2), 1.0);
+    }
+
+    for(const e of state.explosions || []){
+      const s = worldToScreen(e.x || 0, e.y || 0, cam);
+      const boost = e.rocket ? 1.0 : (e.molotov ? 0.86 : 0.92);
+      const outer = Math.max(44, (e.radius || e.maxRadius || 64) * (e.rocket ? 1.18 : 0.96));
+      carveRadialLight(tctx, s.x, s.y, 6, outer, boost);
+    }
+
+    for(const r of state.rockets || []){
+      const s = worldToScreen(r.x || 0, r.y || 0, cam);
+      carveRadialLight(tctx, s.x, s.y, 2, 24, 0.72);
+      const vx = r.vx || 0, vy = r.vy || 0;
+      const mag = Math.hypot(vx, vy) || 1;
+      const tailX = s.x - (vx / mag) * 12;
+      const tailY = s.y - (vy / mag) * 12;
+      carveRadialLight(tctx, tailX, tailY, 1, 18, 0.58);
+    }
+
+    const flameList = state.flameParticles || [];
+    const maxFlameLights = 18;
+    const stride = flameList.length > maxFlameLights ? Math.ceil(flameList.length / maxFlameLights) : 1;
+    for(let i = 0; i < flameList.length; i += stride){
+      const f = flameList[i];
+      const s = worldToScreen(f.x || 0, f.y || 0, cam);
+      carveRadialLight(tctx, s.x, s.y, 1, Math.max(10, (f.size || 5) * 3.2), 0.34);
+    }
+  }
   drawFog = function(cam){
     const tctx = ensureLightingCanvas();
     tctx.clearRect(0,0,SW,SH);
@@ -1781,6 +1827,8 @@
         carveFlashlight(tctx, s.x, s.y, peerFlashlightAngle(peer), { length: 560, nearW: 60, farW: 230, halo: 88 });
       }
     }
+
+    carveProjectileLights(tctx, cam);
     tctx.globalCompositeOperation = 'source-over';
     ctx.drawImage(onlineLightCanvas, 0, 0);
   };
