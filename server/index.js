@@ -7,7 +7,6 @@ const PORT = Number(process.env.PORT || 8080);
 const TICK_RATE = 60;
 const SNAPSHOT_RATE = 60;
 const ROOM_MAX_PLAYERS = 6;
-const MAX_ACTIVE_CLIENTS = 60;
 const WORLD = { w: 3600, h: 2400 };
 const ROCKET_JUMP_DURATION = 0.5;
 const ROCKET_JUMP_BASE_SPEED = 420;
@@ -19,7 +18,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url || '/', 'http://localhost');
   if (url.pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ ok: true, rooms: rooms.size, clients: clients.size, queued: waitingQueue.length, maxClients: MAX_ACTIVE_CLIENTS, status: getServerLoadStatus() }));
+    res.end(JSON.stringify({ ok: true, rooms: rooms.size, clients: clients.size }));
     return;
   }
   const normalizedPath = url.pathname === '/' ? '/index.html' : url.pathname;
@@ -52,8 +51,6 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocket.Server({ server });
 
 const clients = new Map();
-const pendingClients = new Map();
-const waitingQueue = [];
 const rooms = new Map();
 let nextClientNum = 1;
 let nextRoomNum = 1;
@@ -94,71 +91,6 @@ function makeSeededRng(seed) {
 function safeSend(ws, payload) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify(payload));
-}
-function getServerLoadStatus() {
-  if (clients.size >= MAX_ACTIVE_CLIENTS) return 'full';
-  if (clients.size > Math.floor(MAX_ACTIVE_CLIENTS * 0.5)) return 'busy';
-  return 'idle';
-}
-function serverStatusPayload(extra = {}) {
-  return Object.assign({
-    activeClients: clients.size,
-    queueLength: waitingQueue.length,
-    maxClients: MAX_ACTIVE_CLIENTS,
-    status: getServerLoadStatus(),
-  }, extra);
-}
-function safeSendServerStatus(client, extra = {}) {
-  safeSend(client?.ws, { type: 'server_status', server: serverStatusPayload(extra) });
-}
-function broadcastServerStatus() {
-  const payload = { type: 'server_status', server: serverStatusPayload() };
-  for (const client of clients.values()) safeSend(client.ws, payload);
-  for (const client of pendingClients.values()) safeSend(client.ws, payload);
-}
-function refreshQueuePositions() {
-  for (let i = 0; i < waitingQueue.length; i += 1) {
-    const client = waitingQueue[i];
-    if (!client || client.ws.readyState !== WebSocket.OPEN) continue;
-    safeSend(client.ws, {
-      type: 'queue_status',
-      position: i + 1,
-      server: serverStatusPayload({ queued: true, queuePosition: i + 1 }),
-    });
-  }
-}
-function activateClient(client) {
-  pendingClients.delete(client.id);
-  const idx = waitingQueue.findIndex((item) => item && item.id === client.id);
-  if (idx >= 0) waitingQueue.splice(idx, 1);
-  client.queued = false;
-  client.queuePosition = 0;
-  clients.set(client.id, client);
-  safeSend(client.ws, { type: 'welcome', clientId: client.id, server: serverStatusPayload() });
-  safeSend(client.ws, { type: 'queue_promoted', server: serverStatusPayload({ queued: false, queuePosition: 0 }) });
-  safeSend(client.ws, { type: 'room_list', rooms: roomListPayload(), server: serverStatusPayload() });
-  refreshQueuePositions();
-  broadcastServerStatus();
-}
-function enqueueClient(client) {
-  client.queued = true;
-  pendingClients.set(client.id, client);
-  waitingQueue.push(client);
-  refreshQueuePositions();
-  broadcastServerStatus();
-}
-function tryPromoteQueuedClient() {
-  while (clients.size < MAX_ACTIVE_CLIENTS && waitingQueue.length > 0) {
-    const next = waitingQueue.shift();
-    if (!next || next.ws.readyState !== WebSocket.OPEN) {
-      if (next) pendingClients.delete(next.id);
-      continue;
-    }
-    activateClient(next);
-    break;
-  }
-  refreshQueuePositions();
-  broadcastServerStatus();
 }
 function addDamageText(room, x, y, value, color) {
   if (!room || !room.match) return;
@@ -534,14 +466,13 @@ function roomListPayload() {
 }
 function broadcastRoomList() {
   const roomsPayload = roomListPayload();
-  for (const client of clients.values()) safeSend(client.ws, { type: 'room_list', rooms: roomsPayload, server: serverStatusPayload() });
-  for (const client of pendingClients.values()) safeSend(client.ws, { type: 'room_list', rooms: [], server: serverStatusPayload({ queued: true }) });
+  for (const client of clients.values()) safeSend(client.ws, { type: 'room_list', rooms: roomsPayload });
 }
 function broadcastToRoom(room, payload) {
   for (const client of room.players.values()) safeSend(client.ws, payload);
 }
 function broadcastRoomState(room, type = 'room_update') {
-  const payload = { type, room: roomPublicState(room), server: serverStatusPayload() };
+  const payload = { type, room: roomPublicState(room) };
   broadcastToRoom(room, payload);
 }
 function spawnAtRoomCenter(room) {
@@ -1838,11 +1769,10 @@ wss.on('connection', (ws) => {
     lang: 'en',
     roomId: null,
     ready: false,
-    queued: false,
-    queuePosition: 0,
   };
-  if (clients.size < MAX_ACTIVE_CLIENTS) activateClient(client);
-  else enqueueClient(client);
+  clients.set(client.id, client);
+  safeSend(ws, { type: 'welcome', clientId: client.id });
+  safeSend(ws, { type: 'room_list', rooms: roomListPayload() });
 
   ws.on('message', (raw) => {
     let msg = null;
@@ -1852,17 +1782,11 @@ wss.on('connection', (ws) => {
     if (msg.type === 'hello') {
       if (typeof msg.name === 'string' && msg.name.trim()) client.name = msg.name.trim().slice(0, 18);
       if (typeof msg.lang === 'string') client.lang = msg.lang;
-      if (clients.has(client.id)) safeSend(ws, { type: 'room_list', rooms: roomListPayload(), server: serverStatusPayload() });
-      else safeSend(ws, { type: 'queue_status', position: Math.max(1, waitingQueue.findIndex((item) => item && item.id === client.id) + 1 || 1), server: serverStatusPayload({ queued: true }) });
+      safeSend(ws, { type: 'room_list', rooms: roomListPayload() });
       return;
     }
     if (msg.type === 'list_rooms') {
-      if (clients.has(client.id)) safeSend(ws, { type: 'room_list', rooms: roomListPayload(), server: serverStatusPayload() });
-      else safeSend(ws, { type: 'queue_status', position: Math.max(1, waitingQueue.findIndex((item) => item && item.id === client.id) + 1 || 1), server: serverStatusPayload({ queued: true }) });
-      return;
-    }
-    if (!clients.has(client.id)) {
-      safeSend(ws, { type: 'queue_status', position: Math.max(1, waitingQueue.findIndex((item) => item && item.id === client.id) + 1 || 1), server: serverStatusPayload({ queued: true }) });
+      safeSend(ws, { type: 'room_list', rooms: roomListPayload() });
       return;
     }
     if (msg.type === 'create_room') {
@@ -1933,17 +1857,8 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    if (clients.has(client.id)) {
-      if (client.roomId) removeClientFromRoom(client);
-      clients.delete(client.id);
-      tryPromoteQueuedClient();
-    } else {
-      pendingClients.delete(client.id);
-      const idx = waitingQueue.findIndex((item) => item && item.id === client.id);
-      if (idx >= 0) waitingQueue.splice(idx, 1);
-      refreshQueuePositions();
-      broadcastServerStatus();
-    }
+    if (client.roomId) removeClientFromRoom(client);
+    clients.delete(client.id);
     broadcastRoomList();
   });
 
