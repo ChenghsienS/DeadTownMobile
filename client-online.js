@@ -217,6 +217,102 @@
   function onlineSend(data){ if(online.ws && online.ws.readyState === 1) online.ws.send(JSON.stringify(data)); }
   function onlineSendAction(action){ if(online.connected && online.started) onlineSend({ type:'player_action', action }); }
 
+
+
+  function hashString(str){
+    let h = 2166136261 >>> 0;
+    const s = String(str || '');
+    for(let i=0;i<s.length;i++){
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+  function onlineUnnamedPlayerName(name){
+    const n = String(name || '').trim();
+    return !n || /^player\d*$/i.test(n);
+  }
+  const ONLINE_SURVIVOR_VARIANTS = [
+    { skin:'#cab5a1', face:'#d3c0ae', coat:'#4b544c', pants:'#2a2a29', accent:'#6d665d', hair:'#27211e', hat:'#50564f', bag:'#403933', gunBody:'#676f76', gunTrim:'#2c2c2c', style:0 },
+    { skin:'#c0ab96', face:'#ccbaa6', coat:'#5a5044', pants:'#2f2c29', accent:'#7a6a58', hair:'#332a26', hat:'#655948', bag:'#463d36', gunBody:'#6d6962', gunTrim:'#2c2c2c', style:1 },
+    { skin:'#bfa992', face:'#c9b59e', coat:'#474a50', pants:'#26282b', accent:'#65706b', hair:'#1e1e20', hat:'#39413f', bag:'#33383a', gunBody:'#5f666c', gunTrim:'#252525', style:2 },
+    { skin:'#c8b49f', face:'#d2beaa', coat:'#564b42', pants:'#302c2b', accent:'#8a6d58', hair:'#2a2320', hat:'#4a4038', bag:'#40362f', gunBody:'#71665d', gunTrim:'#2c2c2c', style:3 },
+    { skin:'#bcaa96', face:'#c8b7a4', coat:'#49524e', pants:'#292d2b', accent:'#6e7770', hair:'#242424', hat:'#5a5e58', bag:'#3f4641', gunBody:'#687168', gunTrim:'#272727', style:4 },
+    { skin:'#c6b19c', face:'#d1bdab', coat:'#514749', pants:'#2b2728', accent:'#716269', hair:'#2c2327', hat:'#494246', bag:'#3c3437', gunBody:'#6a6468', gunTrim:'#252525', style:5 },
+  ];
+  function onlinePeerPalette(peer){
+    if(!peer) return null;
+    const hostId = online.roomState && online.roomState.hostId;
+    if(peer.id === hostId) return null;
+    if(!onlineUnnamedPlayerName(peer.name)) return null;
+    return ONLINE_SURVIVOR_VARIANTS[hashString(peer.id || peer.name || 'peer') % ONLINE_SURVIVOR_VARIANTS.length];
+  }
+  function drawRemoteDefaultPlayer(peer, cam){
+    const s = worldToScreen(peer.x||0, peer.y||0, cam), x=Math.round(s.x), y=Math.round(s.y);
+    const facing = (peer.faceDir||1) < 0 ? -1 : 1;
+    const body = '#6ca9ff';
+    const shirt = '#2c5d8f';
+    pxRect(x-6,y-8,12,10,'#bca18f');
+    pxRect(x-7,y+2,14,10,shirt);
+    pxRect(x-7,y+12,4,6,'#242424');
+    pxRect(x+3,y+12,4,6,'#242424');
+    ctx.fillStyle='rgba(0,0,0,0.28)';
+    ctx.fillRect(x-10,y+18,20,4);
+    drawRotatedGun(x+(facing>0?5:-5), y+5, facing>0?0:Math.PI, body, '#d6b07a', peer.weapon||'shotgun');
+    ctx.font='12px Courier New';
+    ctx.textAlign='center';
+    ctx.fillStyle='rgba(0,0,0,0.65)';
+    ctx.fillText(String(peer.name||'Player'), x+1, y-13+1);
+    ctx.fillStyle='#9cc2ff';
+    ctx.fillText(String(peer.name||'Player'), x, y-13);
+    const barW=22, ratio=Math.max(0,Math.min(1,(peer.hp||0)/(peer.maxHp||100)));
+    pxRect(x-barW/2,y-28,barW,4,'rgba(255,255,255,0.12)');
+    pxRect(x-barW/2,y-28,barW*ratio,4,'#59c36a');
+  }
+  function drawRemoteVariantPlayer(peer, cam, palette){
+    const s = worldToScreen(peer.x||0, peer.y||0, cam), x=Math.round(s.x), y=Math.round(s.y);
+    const facing = (peer.faceDir||1) < 0 ? -1 : 1;
+    ctx.fillStyle='rgba(0,0,0,0.28)';
+    ctx.fillRect(x-10,y+18,20,4);
+    const faceColor = palette.face;
+    pxRect(x-6,y-8,12,10,faceColor);
+    if(palette.style === 0){ pxRect(x-6,y-11,12,4,palette.hat); }
+    else if(palette.style === 1){ pxRect(x-7,y-10,14,3,palette.hat); pxRect(x-6,y-7,12,2,palette.accent); }
+    else if(palette.style === 2){ pxRect(x-7,y-11,14,3,palette.hair); pxRect(x-6,y-8,12,2,palette.hat); }
+    else if(palette.style === 3){ pxRect(x-7,y-11,14,4,palette.hat); pxRect(facing>0?x+5:x-9,y-6,4,1,palette.accent); }
+    else if(palette.style === 4){ pxRect(x-6,y-10,12,3,palette.hair); pxRect(x-7,y-7,14,2,palette.accent); }
+    else { pxRect(x-6,y-10,12,3,palette.hat); pxRect(x-5,y-7,10,1,palette.hair); }
+    pxRect(x-3,y-4,2,2,'#0c0c0c');
+    pxRect(x+1,y-4,2,2,'#0c0c0c');
+    pxRect(facing>0?x+4:x-7,y-1,3,2,palette.accent);
+    pxRect(x-7,y+2,14,10,palette.coat);
+    if(palette.style === 1 || palette.style === 5) pxRect(x-2,y+2,4,10,palette.accent);
+    if(palette.style === 2 || palette.style === 4) pxRect(facing>0?x-9:x+5,y+1,4,11,palette.bag);
+    pxRect(x-7,y+12,4,6,palette.pants);
+    pxRect(x+3,y+12,4,6,palette.pants);
+    if(palette.style === 0 || palette.style === 3) pxRect(x-6,y+5,12,2,palette.accent);
+    drawRotatedGun(x+(facing>0?5:-5), y+5, facing>0?0:Math.PI, palette.gunBody, palette.gunTrim, peer.weapon||'shotgun');
+    ctx.font='12px Courier New';
+    ctx.textAlign='center';
+    ctx.fillStyle='rgba(0,0,0,0.65)';
+    ctx.fillText(String(peer.name||'Player'), x+1, y-13+1);
+    ctx.fillStyle='#d7d1c7';
+    ctx.fillText(String(peer.name||'Player'), x, y-13);
+    const barW=22, ratio=Math.max(0,Math.min(1,(peer.hp||0)/(peer.maxHp||100)));
+    pxRect(x-barW/2,y-28,barW,4,'rgba(255,255,255,0.12)');
+    pxRect(x-barW/2,y-28,barW*ratio,4,'#59c36a');
+  }
+  function drawOnlinePeerLight(peer, cam){
+    if(!peer) return;
+    const p = worldToScreen(peer.x||0, peer.y||0, cam);
+    const cut = ctx.createRadialGradient(p.x,p.y,44,p.x,p.y,300);
+    cut.addColorStop(0,'rgba(0,0,0,0.72)');
+    cut.addColorStop(0.55,'rgba(0,0,0,0.26)');
+    cut.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = cut;
+    ctx.fillRect(p.x-320,p.y-320,640,640);
+  }
+
   const __origLoadLeaderboard = loadLeaderboard;
   loadLeaderboard = async function(force=false){ if(onlineIsMode()) return; return __origLoadLeaderboard(force); };
   const __origSyncPlayerBest = syncPlayerBest;
@@ -868,6 +964,33 @@
     }
   };
 
+
+
+  const __origDrawFog = drawFog;
+  drawFog = function(cam){
+    __origDrawFog(cam);
+    if(!(online.connected && online.started && state.running && onlineIsMode())) return;
+    const peers = Object.values(online.peers || {});
+    if(!peers.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    for(const peer of peers) drawOnlinePeerLight(peer, cam);
+    ctx.restore();
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    for(const peer of peers){
+      if(!peer) continue;
+      const p = worldToScreen(peer.x||0, peer.y||0, cam);
+      const glow = ctx.createRadialGradient(p.x,p.y,18,p.x,p.y,220);
+      glow.addColorStop(0,'rgba(255,220,150,0.12)');
+      glow.addColorStop(0.55,'rgba(255,180,110,0.05)');
+      glow.addColorStop(1,'rgba(255,180,110,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(p.x-230,p.y-230,460,460);
+    }
+    ctx.restore();
+  };
+
   const __origRender = render;
   render = function(){
     __origRender();
@@ -885,25 +1008,8 @@
   };
 
   function drawRemotePlayer(peer, cam){
-    const s = worldToScreen(peer.x||0, peer.y||0, cam), x=Math.round(s.x), y=Math.round(s.y);
-    const facing = (peer.faceDir||1) < 0 ? -1 : 1;
-    const body = '#6ca9ff';
-    const shirt = '#2c5d8f';
-    pxRect(x-6,y-8,12,10,'#bca18f');
-    pxRect(x-7,y+2,14,10,shirt);
-    pxRect(x-7,y+12,4,6,'#242424');
-    pxRect(x+3,y+12,4,6,'#242424');
-    ctx.fillStyle='rgba(0,0,0,0.28)';
-    ctx.fillRect(x-10,y+18,20,4);
-    drawRotatedGun(x+(facing>0?5:-5), y+5, facing>0?0:Math.PI, body, '#d6b07a', peer.weapon||'shotgun');
-    ctx.font='12px Courier New';
-    ctx.textAlign='center';
-    ctx.fillStyle='rgba(0,0,0,0.65)';
-    ctx.fillText(String(peer.name||'Player'), x+1, y-13+1);
-    ctx.fillStyle='#9cc2ff';
-    ctx.fillText(String(peer.name||'Player'), x, y-13);
-    const barW=22, ratio=Math.max(0,Math.min(1,(peer.hp||0)/(peer.maxHp||100)));
-    pxRect(x-barW/2,y-28,barW,4,'rgba(255,255,255,0.12)');
-    pxRect(x-barW/2,y-28,barW*ratio,4,'#59c36a');
+    const palette = onlinePeerPalette(peer);
+    if(!palette) return drawRemoteDefaultPlayer(peer, cam);
+    return drawRemoteVariantPlayer(peer, cam, palette);
   }
 })();
