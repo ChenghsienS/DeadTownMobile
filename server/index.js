@@ -8,6 +8,7 @@ const TICK_RATE = 60;
 const SNAPSHOT_RATE = 20;
 const SNAPSHOT_BUFFER_LIMIT = 256 * 1024;
 const PLAYER_NAME_MAX_LENGTH = 25;
+const CHAT_MESSAGE_MAX_LENGTH = 100;
 const SNAPSHOT_PROJECTILE_CAP = 140;
 const SNAPSHOT_VISUAL_FX_CAP = 48;
 const ROOM_MAX_PLAYERS = 6;
@@ -588,6 +589,17 @@ function broadcastToRoom(room, payload) {
 function broadcastRoomState(room, type = 'room_update') {
   const payload = { type, room: roomPublicState(room), server: serverStatusPayload() };
   broadcastToRoom(room, payload);
+}
+function broadcastRoomChat(room, client, message) {
+  const clean = String(message || '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MESSAGE_MAX_LENGTH);
+  if (!clean) return;
+  broadcastToRoom(room, {
+    type: 'chat_message',
+    roomId: room.roomId,
+    playerId: client.id,
+    name: client.name,
+    message: clean,
+  });
 }
 function spawnAtRoomCenter(room) {
   const count = room.players.size;
@@ -2098,6 +2110,15 @@ wss.on('connection', (ws) => {
       }
       if (!clients.has(client.id)) {
         safeSend(ws, { type: 'queue_status', position: Math.max(1, waitingQueue.findIndex((item) => item && item.id === client.id) + 1 || 1), server: serverStatusPayload({ queued: true }) });
+        return;
+      }
+      if (msg.type === 'chat_send') {
+        const room = rooms.get(client.roomId);
+        if (!room || !room.players.has(client.id)) return;
+        const message = typeof msg.message === 'string' ? msg.message : '';
+        const clean = message.replace(/\s+/g, ' ').trim().slice(0, CHAT_MESSAGE_MAX_LENGTH);
+        if (!clean) return;
+        broadcastRoomChat(room, client, clean);
         return;
       }
       if (msg.type === 'create_room') {

@@ -78,6 +78,10 @@
       onlineStatusDowned: 'Downed',
       onlineStatusDead: 'Dead',
       onlineStatusTimer: 'Time',
+      onlineMobileDisabled: 'Mobile-mode online multiplayer is temporarily disabled due to severe bugs. Stay tuned.',
+      onlineChatTitle: 'TEAM CHAT',
+      onlineChatHint: 'Press Enter to chat',
+      onlineChatPlaceholder: 'Type a message (max 100 chars)...',
     },
     zh: {
       onlineBtn: '在线合作',
@@ -138,6 +142,10 @@
       onlineStatusDowned: '倒地',
       onlineStatusDead: '死亡',
       onlineStatusTimer: '剩余',
+      onlineMobileDisabled: '目前手游模式多人存在严重 Bug，暂时关闭多人模式，敬请期待。',
+      onlineChatTitle: '队伍聊天',
+      onlineChatHint: '按回车开始聊天',
+      onlineChatPlaceholder: '输入消息（最多 100 字）...',
       onlineScoreboard: '局内分数',
       onlineTotalScore: '总分',
       onlineSummaryTitle: '对局结算',
@@ -210,10 +218,203 @@
     localHitSoundCooldown: 0,
     localFireZonePulseById: new Map(),
     zombieVisuals: new Map(),
+    chatMessages: [],
+    chatOpen: false,
+    chatUnread: 0,
+    remoteSoundSeenShotIds: new Set(),
+    remoteSoundSeenProjectileIds: new Set(),
+    remoteSoundSeenDashIds: new Set(),
+    remoteAudioCooldowns: new Map(),
   };
   window.deadtownOnline = online;
 
   function ot(){ return ONLINE_T[lang] || ONLINE_T.en; }
+
+
+  function onlineMobileMultiplayerDisabled(){
+    pushOnlineNotice(ot().onlineMobileDisabled, 'warn', 2800);
+    return true;
+  }
+
+  function onlineCanUseChat(){
+    return !!(online.gameMode === 'online' && online.connected && online.roomId && (state.overlayScreen === 'online-room' || (online.started && state.running && !state.gameOver)));
+  }
+
+  function onlineIsTypingElement(el){
+    if(!el) return false;
+    const tag = String(el.tagName || '').toLowerCase();
+    return tag === 'input' || tag === 'textarea' || !!el.isContentEditable;
+  }
+
+  function ensureOnlineChatUi(){
+    let rootEl = document.getElementById('onlineChatHud');
+    if(rootEl) return rootEl;
+    rootEl = document.createElement('div');
+    rootEl.id = 'onlineChatHud';
+    rootEl.style.cssText = 'position:fixed;left:12px;bottom:16px;width:min(360px,42vw);display:none;z-index:44;font-family:Courier New,monospace;pointer-events:none;';
+    rootEl.innerHTML = `
+      <div id="onlineChatBox" style="background:rgba(10,10,12,0.86);border:2px solid rgba(255,255,255,0.1);box-shadow:0 0 0 2px rgba(0,0,0,0.28) inset;padding:10px 10px 8px;backdrop-filter:blur(2px);">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;">
+          <div id="onlineChatTitle" class="accent" style="font-size:13px;letter-spacing:1px;">TEAM CHAT</div>
+          <div id="onlineChatHint" style="opacity:0.62;font-size:11px;white-space:nowrap;"></div>
+        </div>
+        <div id="onlineChatLog" style="display:flex;flex-direction:column;gap:5px;min-height:76px;max-height:180px;overflow:hidden;"></div>
+        <div id="onlineChatInputRow" style="display:none;gap:8px;align-items:center;margin-top:8px;pointer-events:auto;">
+          <input id="onlineChatInput" maxlength="100" autocomplete="off" spellcheck="false" style="flex:1;min-width:0;padding:8px 10px;background:#131114;border:1px solid rgba(255,255,255,0.14);color:#f0e6d8;font:inherit;outline:none;" />
+          <button id="onlineChatSendBtn" type="button" style="padding:8px 10px;">OK</button>
+        </div>
+      </div>`;
+    document.body.appendChild(rootEl);
+    const input = document.getElementById('onlineChatInput');
+    const sendBtn = document.getElementById('onlineChatSendBtn');
+    if(input){
+      input.addEventListener('keydown', (ev)=>{
+        if(ev.key === 'Enter'){
+          ev.preventDefault();
+          onlineSubmitChat();
+        }else if(ev.key === 'Escape'){
+          ev.preventDefault();
+          onlineCloseChat();
+        }
+      });
+      input.addEventListener('input', ()=>{ if(input.value.length > 100) input.value = input.value.slice(0, 100); });
+    }
+    if(sendBtn) sendBtn.addEventListener('click', (ev)=>{ ev.preventDefault(); onlineSubmitChat(); });
+    return rootEl;
+  }
+
+  function onlineChatVisible(){
+    return onlineCanUseChat() && !MOBILE_MODE;
+  }
+
+  function onlineUpdateChatUi(){
+    const rootEl = ensureOnlineChatUi();
+    const visible = onlineChatVisible();
+    rootEl.style.display = visible ? 'block' : 'none';
+    if(!visible){
+      online.chatOpen = false;
+      return;
+    }
+    rootEl.style.width = MOBILE_MODE ? 'min(74vw,320px)' : 'min(360px,42vw)';
+    rootEl.style.left = MOBILE_MODE ? '8px' : '12px';
+    rootEl.style.bottom = state.overlayScreen === 'online-room' ? '18px' : '16px';
+    const title = document.getElementById('onlineChatTitle');
+    const hint = document.getElementById('onlineChatHint');
+    const log = document.getElementById('onlineChatLog');
+    const row = document.getElementById('onlineChatInputRow');
+    const input = document.getElementById('onlineChatInput');
+    if(title) title.textContent = ot().onlineChatTitle;
+    if(hint) hint.textContent = online.chatOpen ? 'Esc' : `${ot().onlineChatHint}${online.chatUnread>0?` · ${online.chatUnread}`:''}`;
+    if(input){
+      input.placeholder = ot().onlineChatPlaceholder;
+      input.maxLength = 100;
+    }
+    if(row) row.style.display = online.chatOpen ? 'flex' : 'none';
+    if(log){
+      const items = online.chatMessages.slice(-8);
+      log.innerHTML = items.length ? items.map((msg)=>{
+        const mine = msg.playerId && msg.playerId === online.clientId;
+        const color = mine ? '#ffcf96' : '#f0e6d8';
+        return `<div style="font-size:12px;line-height:1.35;word-break:break-word;white-space:pre-wrap;"><span style="color:${color};font-weight:bold;">${escapeHtml(msg.displayName || msg.name || 'Player')}:</span> <span style="color:#f0e6d8;">${escapeHtml(msg.message || '')}</span></div>`;
+      }).join('') : `<div style="opacity:0.48;font-size:12px;">${escapeHtml(ot().onlineChatHint)}</div>`;
+    }
+  }
+
+  function onlineOpenChat(){
+    if(!onlineChatVisible()) return;
+    online.chatOpen = true;
+    online.chatUnread = 0;
+    state.keys.clear();
+    mouseDown = false;
+    onlineUpdateChatUi();
+    const input = document.getElementById('onlineChatInput');
+    if(input){
+      input.value = '';
+      setTimeout(()=>{ try{ input.focus(); input.select(); }catch(_err){} }, 0);
+    }
+  }
+
+  function onlineCloseChat(){
+    online.chatOpen = false;
+    onlineUpdateChatUi();
+    const input = document.getElementById('onlineChatInput');
+    if(input){ try{ input.blur(); }catch(_err){} }
+  }
+
+  function onlinePushChatMessage(data){
+    if(!data || !data.message) return;
+    const entry = {
+      playerId: data.playerId || null,
+      name: data.name || 'Player',
+      displayName: onlineDisplayNameForId(data.playerId, data.name || 'Player'),
+      message: String(data.message || '').slice(0, 100),
+      ts: Date.now(),
+    };
+    online.chatMessages.push(entry);
+    if(online.chatMessages.length > 40) online.chatMessages.splice(0, online.chatMessages.length - 40);
+    if(!online.chatOpen && entry.playerId && entry.playerId !== online.clientId) online.chatUnread = Math.min(99, (online.chatUnread || 0) + 1);
+    if(entry.playerId && entry.playerId !== online.clientId && typeof playMenuClick === 'function') playMenuClick();
+    onlineUpdateChatUi();
+  }
+
+  function onlineSubmitChat(){
+    const input = document.getElementById('onlineChatInput');
+    if(!input) return;
+    const message = String(input.value || '').trim().slice(0, 100);
+    if(!message){ onlineCloseChat(); return; }
+    if(!(online.connected && online.roomId)) return;
+    onlineSend({ type:'chat_send', message });
+    input.value = '';
+    onlineCloseChat();
+  }
+
+  function playRemoteThrowLocal(){
+    if(typeof ensureAudio !== 'function' || typeof tone !== 'function' || typeof hiss !== 'function') return;
+    const a = ensureAudio(), t = a.currentTime;
+    tone('triangle', 240, t, 0.07, 0.026);
+    tone('triangle', 180, t + 0.05, 0.08, 0.02);
+    hiss(1100, t, 0.10, 0.03);
+  }
+
+  function onlineShouldHearAction(x, y, radius=950){
+    return onlineShouldHearFx(x, y, radius);
+  }
+
+  function reconcileRemoteActionAudio(match, selfId){
+    const shotFx = Array.isArray(match?.shotFx) ? match.shotFx : [];
+    const projectileFx = Array.isArray(match?.projectiles) ? match.projectiles : [];
+    const activeShotIds = new Set();
+    for(const fx of shotFx){
+      if(!fx || fx.id == null) continue;
+      activeShotIds.add(fx.id);
+      if(online.remoteSoundSeenShotIds.has(fx.id)) continue;
+      online.remoteSoundSeenShotIds.add(fx.id);
+      if(fx.ownerId && fx.ownerId === selfId) continue;
+      if(!onlineShouldHearAction(fx.x, fx.y, fx.weapon === 'shotgun' ? 1100 : 1000)) continue;
+      const weapon = fx.weapon || 'shotgun';
+      const cooldownKey = `${fx.ownerId || 'remote'}:${weapon}`;
+      const now = performance.now();
+      const minGap = weapon === 'gatling' ? 80 : weapon === 'flamethrower' ? 100 : weapon === 'rocket' ? 240 : 160;
+      const lastAt = online.remoteAudioCooldowns.get(cooldownKey) || 0;
+      if((now - lastAt) < minGap) continue;
+      online.remoteAudioCooldowns.set(cooldownKey, now);
+      if(typeof playShot === 'function') playShot(weapon);
+    }
+    for(const seenId of Array.from(online.remoteSoundSeenShotIds)) if(!activeShotIds.has(seenId)) online.remoteSoundSeenShotIds.delete(seenId);
+
+    const activeProjectileIds = new Set();
+    for(const projectile of projectileFx){
+      if(!projectile || projectile.id == null) continue;
+      if(projectile.kind !== 'grenade' && projectile.kind !== 'molotov') continue;
+      activeProjectileIds.add(projectile.id);
+      if(online.remoteSoundSeenProjectileIds.has(projectile.id)) continue;
+      online.remoteSoundSeenProjectileIds.add(projectile.id);
+      if(projectile.ownerId && projectile.ownerId === selfId) continue;
+      if(!onlineShouldHearAction(projectile.startX ?? projectile.x, projectile.startY ?? projectile.y, 900)) continue;
+      playRemoteThrowLocal();
+    }
+    for(const seenId of Array.from(online.remoteSoundSeenProjectileIds)) if(!activeProjectileIds.has(seenId)) online.remoteSoundSeenProjectileIds.delete(seenId);
+  }
 
   function roomDisplayNameMap(room){
     const map = new Map();
@@ -462,6 +663,14 @@
     online.cameraFocusX = null;
     online.cameraFocusY = null;
     online.spectateSwitchCooldown = 0;
+    online.chatMessages = [];
+    online.chatOpen = false;
+    online.chatUnread = 0;
+    online.remoteSoundSeenShotIds = new Set();
+    online.remoteSoundSeenProjectileIds = new Set();
+    online.remoteSoundSeenDashIds = new Set();
+    online.remoteAudioCooldowns = new Map();
+    onlineUpdateChatUi();
     if(!keepConnection){
       online.connected = false;
       online.connecting = false;
@@ -822,7 +1031,14 @@
   }
 
   function mergeOnlinePeer(prevPeer, nextPeer, now){
-    return makeVisualState(nextPeer, now, prevPeer, { kind:'peer' });
+    const visual = makeVisualState(nextPeer, now, prevPeer, { kind:'peer' });
+    const justDashed = !!prevPeer && (prevPeer.dashTime || 0) <= 0.02 && (nextPeer?.dashTime || 0) > 0.12;
+    if(justDashed && nextPeer?.id && nextPeer.id !== online.clientId && !online.remoteSoundSeenDashIds.has(nextPeer.id) && onlineShouldHearAction(nextPeer.x, nextPeer.y, 820)){
+      online.remoteSoundSeenDashIds.add(nextPeer.id);
+      if(typeof playDash === 'function') playDash();
+    }
+    if((nextPeer?.dashTime || 0) <= 0.02 && nextPeer?.id) online.remoteSoundSeenDashIds.delete(nextPeer.id);
+    return visual;
   }
 
   function mergeOnlineZombie(prevZombie, nextZombie, now){
@@ -928,6 +1144,7 @@
     state.pickups = Array.isArray(match.pickups) ? match.pickups.map(p=>Object.assign({}, p)) : [];
     state.airdrops = Array.isArray(match.airdrops) ? match.airdrops.map(a=>Object.assign({}, a)) : [];
     state.fireZones = Array.isArray(match.fireZones) ? match.fireZones.map(z=>Object.assign({}, z)) : [];
+    reconcileRemoteActionAudio(match, selfId);
     state.explosions = Array.isArray(match.effects) ? match.effects.map(e=>Object.assign({}, e)) : [];
     reconcileOnlineEffects(match.effects, selfId);
     reconcileOnlineBloodFx(match.bloodFx, selfId);
@@ -1088,6 +1305,10 @@
       renderOnlineMatchSummary(online.matchSummary, online.matchOverMessage);
       return;
     }
+    if(msg.type === 'chat_message'){
+      onlinePushChatMessage(msg);
+      return;
+    }
     if(msg.type === 'error'){
       pushOnlineNotice(msg.message || 'Server error', 'error');
     }
@@ -1111,6 +1332,7 @@
   function refreshOnlineRooms(){ onlineSend({ type:'list_rooms' }); }
 
   function renderOnlineLobby(){
+    if(MOBILE_MODE){ onlineMobileMultiplayerDisabled(); return; }
     state.overlayScreen = 'online-lobby';
     online.desiredConnected = true;
     const t = ot();
@@ -1164,6 +1386,7 @@
       if(typeof window.bindPlayerNameEditor === 'function') window.bindPlayerNameEditor();
       document.querySelectorAll('[data-join-room]').forEach(btn=>btn.onclick = ()=>joinOnlineRoom(btn.getAttribute('data-join-room')));
       onlineEnsureConnected();
+      onlineUpdateChatUi();
     },0);
   }
 
@@ -1202,10 +1425,31 @@
       const ready = $('onlineReadyBtn'); if(ready) ready.onclick = ()=>toggleOnlineReady();
       if(typeof window.bindPlayerNameEditor === 'function') window.bindPlayerNameEditor();
       const start = $('onlineStartBtn'); if(start) start.onclick = ()=>startOnlineMatch();
+      onlineUpdateChatUi();
     },0);
   }
 
   window.joinOnlineRoom = joinOnlineRoom;
+
+
+  addEventListener('keydown', (ev)=>{
+    if(!onlineChatVisible()) return;
+    const active = document.activeElement;
+    const typingElsewhere = onlineIsTypingElement(active) && active?.id !== 'onlineChatInput';
+    if(typingElsewhere) return;
+    if(ev.key === 'Enter'){
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      if(online.chatOpen) onlineSubmitChat();
+      else onlineOpenChat();
+      return;
+    }
+    if(ev.key === 'Escape' && online.chatOpen){
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      onlineCloseChat();
+    }
+  }, true);
 
   function formatOnlineTime(seconds){
     const total = Math.max(0, Math.floor(seconds || 0));
@@ -1253,6 +1497,7 @@
       if(roomBtn) roomBtn.onclick = ()=>renderOnlineRoom();
       const menuBtn = $('onlineSummaryMenuBtn');
       if(menuBtn) menuBtn.onclick = ()=>{ onlineDisconnect(true, true); goToMainMenu(); };
+      onlineUpdateChatUi();
     },0);
   }
 
@@ -1262,6 +1507,7 @@
     }else if(state.overlayScreen === 'online-lobby' && online.desiredConnected && (!online.connected || online.connecting || online.reconnectAt)){
       renderOnlineLobby();
     }
+    onlineUpdateChatUi();
   }, 250);
 
   const __origRenderMainMenu = renderMainMenu;
@@ -1276,11 +1522,27 @@
       const btn = document.createElement('button');
       btn.id = 'onlineCoopBtn';
       btn.textContent = t.onlineBtn;
-      btn.onclick = ()=>{ online.gameMode='single'; renderOnlineLobby(); };
+      btn.onclick = ()=>{ if(MOBILE_MODE){ onlineMobileMultiplayerDisabled(); return; } online.gameMode='single'; renderOnlineLobby(); };
       const startBtn = target.querySelector('#startBtn');
       if(startBtn) startBtn.insertAdjacentElement('afterend', btn);
       else target.appendChild(btn);
     }
+  };
+
+
+
+  const __origTogglePause = togglePause;
+  togglePause = function(){
+    if(online.gameMode === 'online') return;
+    return __origTogglePause();
+  };
+
+  const __origUpdatePauseButton = updatePauseButton;
+  updatePauseButton = function(){
+    __origUpdatePauseButton();
+    if(online.gameMode !== 'online') return;
+    const btn = $('pauseTopBtn');
+    if(btn) btn.classList.add('hidden');
   };
 
   const __origSetWeaponLoadout = setWeaponLoadout;
