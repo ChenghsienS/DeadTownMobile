@@ -368,12 +368,103 @@
     onlineCloseChat();
   }
 
-  function playRemoteThrowLocal(){
-    if(typeof ensureAudio !== 'function' || typeof tone !== 'function' || typeof hiss !== 'function') return;
+  function onlineAudioSourceData(x, y, maxDistance=950){
+    if(!Number.isFinite(x) || !Number.isFinite(y)) return { gain: 1, pan: 0, listener: onlineAudioListenerPos() };
+    const listener = onlineAudioListenerPos();
+    const d = dist(listener.x, listener.y, x, y);
+    const falloff = clamp(1 - d / Math.max(1, maxDistance), 0, 1);
+    const gain = falloff * falloff;
+    const pan = clamp((x - listener.x) / Math.max(1, maxDistance * 0.55), -0.7, 0.7);
+    return { gain, pan, listener, distance: d };
+  }
+
+  function onlineToneAtSource(type, freq, start, duration, peak, x, y, maxDistance=950){
+    if(typeof ensureAudio !== 'function' || typeof audioOut !== 'function') return;
+    const src = onlineAudioSourceData(x, y, maxDistance);
+    if(src.gain <= 0.015) return;
+    const a = ensureAudio();
+    const o = a.createOscillator();
+    const g = a.createGain();
+    const p = a.createStereoPanner ? a.createStereoPanner() : null;
+    o.type = type;
+    o.frequency.setValueAtTime(freq, start);
+    const scaledPeak = Math.max(0.0001, peak * src.gain);
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(scaledPeak, start + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    o.connect(g);
+    if(p){ p.pan.value = src.pan; g.connect(p).connect(audioOut()); }
+    else g.connect(audioOut());
+    o.start(start);
+    o.stop(start + duration + 0.03);
+  }
+
+  function onlineHissAtSource(freq, start, duration, peak, x, y, maxDistance=950){
+    if(typeof ensureAudio !== 'function' || typeof audioOut !== 'function' || typeof noiseBuffer !== 'function') return;
+    const srcData = onlineAudioSourceData(x, y, maxDistance);
+    if(srcData.gain <= 0.015) return;
+    const a = ensureAudio();
+    const src = a.createBufferSource();
+    const bp = a.createBiquadFilter();
+    const g = a.createGain();
+    const p = a.createStereoPanner ? a.createStereoPanner() : null;
+    src.buffer = noiseBuffer(duration + 0.08);
+    bp.type = 'bandpass';
+    bp.frequency.value = freq;
+    bp.Q.value = 0.85;
+    const scaledPeak = Math.max(0.0001, peak * srcData.gain);
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(scaledPeak, start + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    if(p){ p.pan.value = srcData.pan; src.connect(bp).connect(g).connect(p).connect(audioOut()); }
+    else src.connect(bp).connect(g).connect(audioOut());
+    src.start(start);
+    src.stop(start + duration + 0.04);
+  }
+
+  function playRemoteShotLocal(kind='shotgun', x=player.x, y=player.y){
+    if(typeof ensureAudio !== 'function') return;
     const a = ensureAudio(), t = a.currentTime;
-    tone('triangle', 240, t, 0.07, 0.026);
-    tone('triangle', 180, t + 0.05, 0.08, 0.02);
-    hiss(1100, t, 0.10, 0.03);
+    if(kind === 'shotgun'){
+      onlineToneAtSource('square',145,t,0.22,0.24,x,y,1200); onlineToneAtSource('triangle',62,t+0.015,0.28,0.16,x,y,1200); onlineHissAtSource(920,t,0.18,0.23,x,y,1200);
+    }else if(kind === 'gatling'){
+      onlineToneAtSource('square',255,t,0.08,0.13,x,y,1050); onlineToneAtSource('triangle',122,t+0.01,0.07,0.08,x,y,1050); onlineHissAtSource(1750,t,0.06,0.10,x,y,1050);
+    }else if(kind === 'rocket'){
+      onlineToneAtSource('sawtooth',108,t,0.34,0.18,x,y,1300); onlineToneAtSource('triangle',52,t+0.02,0.44,0.22,x,y,1300); onlineHissAtSource(360,t,0.32,0.28,x,y,1300);
+    }else if(kind === 'flamethrower'){
+      onlineToneAtSource('sawtooth',220,t,0.07,0.045,x,y,900); onlineHissAtSource(1450,t,0.08,0.075,x,y,900); onlineHissAtSource(650,t,0.08,0.035,x,y,900);
+    }
+  }
+
+  function playRemoteThrowLocal(x=player.x, y=player.y, kind='grenade'){
+    if(typeof ensureAudio !== 'function') return;
+    const a = ensureAudio(), t = a.currentTime;
+    const radius = kind === 'molotov' ? 860 : 920;
+    onlineToneAtSource('triangle', kind === 'molotov' ? 260 : 240, t, 0.07, 0.026, x, y, radius);
+    onlineToneAtSource('triangle', kind === 'molotov' ? 190 : 180, t + 0.05, 0.08, 0.02, x, y, radius);
+    onlineHissAtSource(kind === 'molotov' ? 1300 : 1100, t, 0.10, 0.03, x, y, radius);
+  }
+
+  function playRemoteExplosionLocal(effect){
+    if(typeof ensureAudio !== 'function' || !effect) return;
+    const x = Number.isFinite(effect.x) ? effect.x : player.x;
+    const y = Number.isFinite(effect.y) ? effect.y : player.y;
+    const a = ensureAudio(), t = a.currentTime;
+    if(effect.molotov){
+      onlineHissAtSource(620, t, 0.22, 0.14, x, y, 1300);
+      onlineToneAtSource('triangle', 96, t, 0.24, 0.08, x, y, 1300);
+      onlineHissAtSource(1500, t + 0.01, 0.10, 0.06, x, y, 1300);
+      return;
+    }
+    if(effect.rocket){
+      onlineHissAtSource(220, t, 0.40, 0.34, x, y, 1500);
+      onlineToneAtSource('triangle', 58, t, 0.46, 0.18, x, y, 1500);
+      onlineToneAtSource('sawtooth', 32, t + 0.03, 0.52, 0.12, x, y, 1500);
+      return;
+    }
+    onlineHissAtSource(260, t, 0.34, 0.24, x, y, 1350);
+    onlineToneAtSource('triangle', 64, t, 0.34, 0.12, x, y, 1350);
+    onlineToneAtSource('sawtooth', 36, t + 0.03, 0.38, 0.08, x, y, 1350);
   }
 
   function onlineShouldHearAction(x, y, radius=950){
@@ -398,7 +489,7 @@
       const lastAt = online.remoteAudioCooldowns.get(cooldownKey) || 0;
       if((now - lastAt) < minGap) continue;
       online.remoteAudioCooldowns.set(cooldownKey, now);
-      if(typeof playShot === 'function') playShot(weapon);
+      playRemoteShotLocal(weapon, fx.x, fx.y);
     }
     for(const seenId of Array.from(online.remoteSoundSeenShotIds)) if(!activeShotIds.has(seenId)) online.remoteSoundSeenShotIds.delete(seenId);
 
@@ -410,8 +501,10 @@
       if(online.remoteSoundSeenProjectileIds.has(projectile.id)) continue;
       online.remoteSoundSeenProjectileIds.add(projectile.id);
       if(projectile.ownerId && projectile.ownerId === selfId) continue;
-      if(!onlineShouldHearAction(projectile.startX ?? projectile.x, projectile.startY ?? projectile.y, 900)) continue;
-      playRemoteThrowLocal();
+      const sourceX = projectile.startX ?? projectile.x;
+      const sourceY = projectile.startY ?? projectile.y;
+      if(!onlineShouldHearAction(sourceX, sourceY, 900)) continue;
+      playRemoteThrowLocal(sourceX, sourceY, projectile.kind || 'grenade');
     }
     for(const seenId of Array.from(online.remoteSoundSeenProjectileIds)) if(!activeProjectileIds.has(seenId)) online.remoteSoundSeenProjectileIds.delete(seenId);
   }
@@ -816,9 +909,8 @@
       if(!z) continue;
       if(dist(zone.x, zone.y, z.x, z.y) >= (zone.radius || 0) + (z.radius || 0)) continue;
       spawnLocalOnlyDamageFeedback(z.x + rand(-16,16), z.y - (z.radius || 0) - 10, dealt, '#ffd84d', {
-        bloodCount: 2,
-        bloodColor: 'rgba(255,120,40,0.7)',
-        bloodForce: 0.25,
+        bloodCount: 0,
+        hitSound: true,
       });
     }
   }
@@ -1100,6 +1192,7 @@
       if(!online.seenEffectIds.has(effect.id)){
         online.seenEffectIds.add(effect.id);
         spawnOnlineEffectParticles(effect, selfId);
+        if(!(effect.ownerId && effect.ownerId === selfId)) playRemoteExplosionLocal(effect);
       }
     }
     for(const seenId of Array.from(online.seenEffectIds)){
@@ -1846,9 +1939,8 @@
           const z=state.zombies[j];
           if(dist(z.x,z.y,f.x,f.y)<z.radius+f.size && f.hitTick<=0){
             spawnLocalOnlyDamageFeedback(z.x+rand(-16,16), z.y-z.radius-10, f.damage || 0.8, '#ffd84d', {
-              bloodCount: 2,
-              bloodColor: 'rgba(255,120,40,0.7)',
-              bloodForce: 0.22,
+              bloodCount: 0,
+              hitSound: true,
             });
             f.hitTick=0.06;
           }

@@ -1350,7 +1350,6 @@ function processProjectiles(room, dt) {
               const dealt = p.damage * ((room.match.playersById.get(p.ownerId)?.damageMul) || 1);
               z.hp -= dealt;
               addDamageText(room, z.x, z.y - z.radius - 10, dealt, '#ffd84d');
-              pushBloodFx(room, p.x, p.y, 3, 'rgba(255,120,40,0.7)', 0.3);
               p.hitTick = 0.06;
               if (z.hp <= 0) handleZombieDeath(room, j, p.ownerId || null);
             }
@@ -1770,6 +1769,7 @@ function handleFireAction(room, sourcePlayer, payload) {
     sourcePlayer.mag -= 1;
     sourcePlayer.shootCooldown = 0.48;
     pushSoundFx(room, 'shot', sourcePlayer.x, sourcePlayer.y, { ownerId: sourcePlayer.id, weapon: 'shotgun' });
+    pushShotFx(room, { x: sourcePlayer.x, y: sourcePlayer.y, ownerId: sourcePlayer.id, weapon: 'shotgun', life: 0.18 });
     for (let i = 0; i < 9; i += 1) {
       const spread = randRange(room.rng, -0.18, 0.18);
       const a = aimAngle + spread;
@@ -1781,12 +1781,14 @@ function handleFireAction(room, sourcePlayer, payload) {
     sourcePlayer.mag -= 1;
     sourcePlayer.shootCooldown = 0.055;
     pushSoundFx(room, 'shot', sourcePlayer.x, sourcePlayer.y, { ownerId: sourcePlayer.id, weapon: 'gatling' });
+    pushShotFx(room, { x: sourcePlayer.x, y: sourcePlayer.y, ownerId: sourcePlayer.id, weapon: 'gatling', life: 0.14 });
     const a = aimAngle + randRange(room.rng, -0.038, 0.038);
     spawnPelletProjectile(room, sourcePlayer, a, 980, 0.62, 20, { weaponKind: 'gatling', startOffset: 22, penetration: 5 });
   } else if (sourcePlayer.weapon === 'rocket') {
     sourcePlayer.mag -= 1;
     sourcePlayer.shootCooldown = 0.42;
     pushSoundFx(room, 'shot', sourcePlayer.x, sourcePlayer.y, { ownerId: sourcePlayer.id, weapon: 'rocket' });
+    pushShotFx(room, { x: sourcePlayer.x, y: sourcePlayer.y, ownerId: sourcePlayer.id, weapon: 'rocket', life: 0.22 });
     spawnRocketProjectile(room, sourcePlayer, targetX, targetY);
   } else if (sourcePlayer.weapon === 'flamethrower') {
     sourcePlayer.mag -= 1;
@@ -1794,6 +1796,7 @@ function handleFireAction(room, sourcePlayer, payload) {
     pushSoundFx(room, 'shot', sourcePlayer.x, sourcePlayer.y, { ownerId: sourcePlayer.id, weapon: 'flamethrower' });
     const muzzleX = sourcePlayer.x + Math.cos(aimAngle) * 18;
     const muzzleY = sourcePlayer.y + Math.sin(aimAngle) * 18;
+    pushShotFx(room, { x: muzzleX, y: muzzleY, ownerId: sourcePlayer.id, weapon: 'flamethrower', life: 0.12 });
     for (let i = 0; i < 6; i += 1) {
       const spread = room.rng() < 0.3 ? randRange(room.rng, -0.28, 0.28) : randRange(room.rng, -0.18, 0.18);
       const a = aimAngle + spread;
