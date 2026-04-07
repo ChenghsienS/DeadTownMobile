@@ -1,7 +1,0 @@
-services:
-  - type: web
-    name: deadtown-p0-server
-    env: node
-    plan: free
-    buildCommand: npm install
-    startCommand: npm start
