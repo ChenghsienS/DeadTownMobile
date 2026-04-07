@@ -198,11 +198,58 @@
     },
     localHitSoundCooldown: 0,
     localFireZonePulseById: new Map(),
+    zombieVisuals: new Map(),
   };
   window.deadtownOnline = online;
 
   function ot(){ return ONLINE_T[lang] || ONLINE_T.en; }
   function onlineIsMode(){ return online.gameMode === 'online'; }
+  function lerpAngle(a, b, t){
+    if(!Number.isFinite(a)) return Number.isFinite(b) ? b : 0;
+    if(!Number.isFinite(b)) return a;
+    let diff = (b - a + Math.PI) % (Math.PI * 2);
+    if(diff < 0) diff += Math.PI * 2;
+    diff -= Math.PI;
+    return a + diff * clamp(t, 0, 1);
+  }
+  function stepToward(current, target, factor, snapDistance){
+    if(!Number.isFinite(current)) return target;
+    if(!Number.isFinite(target)) return current;
+    if(Math.abs(target - current) > snapDistance) return target;
+    return current + (target - current) * clamp(factor, 0, 1);
+  }
+  function makeVisualState(snapshot, now, prev, opts={}){
+    const snapX = snapshot?.x || 0;
+    const snapY = snapshot?.y || 0;
+    const snapDt = prev ? Math.max(0.016, Math.min(0.25, (now - (prev.lastSeen || now)) / 1000)) : 0.05;
+    const prevTargetX = prev ? (prev.targetX ?? prev.serverX ?? prev.x ?? snapX) : snapX;
+    const prevTargetY = prev ? (prev.targetY ?? prev.serverY ?? prev.y ?? snapY) : snapY;
+    const base = Object.assign({}, prev || {}, snapshot || {});
+    base.serverX = snapX;
+    base.serverY = snapY;
+    base.targetX = snapX;
+    base.targetY = snapY;
+    base.vx = prev ? (snapX - prevTargetX) / snapDt : 0;
+    base.vy = prev ? (snapY - prevTargetY) / snapDt : 0;
+    base.lastSeen = now;
+    if(!prev){
+      base.displayX = snapX;
+      base.displayY = snapY;
+    }else{
+      base.displayX = Number.isFinite(prev.displayX) ? prev.displayX : snapX;
+      base.displayY = Number.isFinite(prev.displayY) ? prev.displayY : snapY;
+    }
+    base.x = base.displayX;
+    base.y = base.displayY;
+    const aimAngle = Number.isFinite(snapshot?.aimAngle) ? snapshot.aimAngle : ((snapshot?.faceDir||1) < 0 ? Math.PI : 0);
+    base.targetAimAngle = aimAngle;
+    base.displayAimAngle = prev ? (Number.isFinite(prev.displayAimAngle) ? prev.displayAimAngle : aimAngle) : aimAngle;
+    if(opts.kind === 'zombie'){
+      const moveAngle = Math.atan2(base.vy || 0, base.vx || ((base.faceDir||1) < 0 ? -1 : 1));
+      base.displayMoveAngle = prev ? (Number.isFinite(prev.displayMoveAngle) ? prev.displayMoveAngle : moveAngle) : moveAngle;
+    }
+    return base;
+  }
   function onlineStatusText(){
     const t = ot();
     if(online.state === 'connecting') return t.statusConnecting;
@@ -703,31 +750,11 @@
   }
 
   function mergeOnlinePeer(prevPeer, nextPeer, now){
-    if(!prevPeer){
-      return Object.assign({}, nextPeer, {
-        targetX: nextPeer.x || 0,
-        targetY: nextPeer.y || 0,
-        displayX: nextPeer.x || 0,
-        displayY: nextPeer.y || 0,
-        vx: 0,
-        vy: 0,
-        lastSeen: now,
-      });
-    }
-    const snapDt = Math.max(0.016, Math.min(0.25, (now - (prevPeer.lastSeen || now)) / 1000));
-    const prevTargetX = prevPeer.targetX ?? prevPeer.x ?? nextPeer.x ?? 0;
-    const prevTargetY = prevPeer.targetY ?? prevPeer.y ?? nextPeer.y ?? 0;
-    const vx = ((nextPeer.x || 0) - prevTargetX) / snapDt;
-    const vy = ((nextPeer.y || 0) - prevTargetY) / snapDt;
-    return Object.assign({}, prevPeer, nextPeer, {
-      targetX: nextPeer.x || 0,
-      targetY: nextPeer.y || 0,
-      displayX: Number.isFinite(prevPeer.displayX) ? prevPeer.displayX : (nextPeer.x || 0),
-      displayY: Number.isFinite(prevPeer.displayY) ? prevPeer.displayY : (nextPeer.y || 0),
-      vx,
-      vy,
-      lastSeen: now,
-    });
+    return makeVisualState(nextPeer, now, prevPeer, { kind:'peer' });
+  }
+
+  function mergeOnlineZombie(prevZombie, nextZombie, now){
+    return makeVisualState(nextZombie, now, prevZombie, { kind:'zombie' });
   }
 
   function mergeOnlineProjectile(_prevProjectile, nextProjectile){
@@ -815,7 +842,17 @@
     state.score = self?.score ?? state.score;
     state.bossAnnouncement = Math.max(state.bossAnnouncement, match.bossAnnouncement || 0);
     state.airdropAnnouncement = Math.max(state.airdropAnnouncement, match.airdropAnnouncement || 0);
-    state.zombies = Array.isArray(match.zombies) ? match.zombies.map(z=>Object.assign({}, z)) : [];
+    const nextZombieVisuals = new Map();
+    const nextZombieList = [];
+    for(const z of (Array.isArray(match.zombies) ? match.zombies : [])){
+      if(!z) continue;
+      const prevVisual = online.zombieVisuals.get(z.id);
+      const visual = mergeOnlineZombie(prevVisual, z, now);
+      nextZombieVisuals.set(z.id, visual);
+      nextZombieList.push(visual);
+    }
+    online.zombieVisuals = nextZombieVisuals;
+    state.zombies = nextZombieList;
     state.pickups = Array.isArray(match.pickups) ? match.pickups.map(p=>Object.assign({}, p)) : [];
     state.airdrops = Array.isArray(match.airdrops) ? match.airdrops.map(a=>Object.assign({}, a)) : [];
     state.fireZones = Array.isArray(match.fireZones) ? match.fireZones.map(z=>Object.assign({}, z)) : [];
@@ -879,6 +916,7 @@
       online.syncedShotFx = [];
       online.syncedFlameFx = [];
       online.remoteParticles = [];
+      online.zombieVisuals = new Map();
       online.seenEffectIds = new Set();
     online.seenBloodIds = new Set();
     online.seenSoundIds = new Set();
@@ -904,6 +942,7 @@
       state.explosions = [];
       state.fireZones = [];
       online.remoteParticles = [];
+      online.zombieVisuals = new Map();
       online.seenEffectIds = new Set();
     online.seenBloodIds = new Set();
     online.seenSoundIds = new Set();
@@ -920,6 +959,7 @@
       online.syncedShotFx = [];
       online.syncedFlameFx = [];
       online.remoteParticles = [];
+      online.zombieVisuals = new Map();
       online.seenEffectIds = new Set();
     online.seenBloodIds = new Set();
     online.seenSoundIds = new Set();
@@ -1198,6 +1238,7 @@
     onlineSetSpectating(false);
     online.matchSummary = null;
     online.matchOverMessage = '';
+    online.zombieVisuals = new Map();
     online.gameMode = 'single';
     online.desiredConnected = false;
     onlineClearReconnectTimer();
@@ -1211,16 +1252,35 @@
       peer.dashTime = Math.max(0, (peer.dashTime || 0) - dt);
       peer.rocketJumpTime = Math.max(0, (peer.rocketJumpTime || 0) - dt);
       peer.knockbackTime = Math.max(0, (peer.knockbackTime || 0) - dt);
-      const age = Math.min(0.1, Math.max(0, (now - (peer.lastSeen || now)) / 1000));
-      const targetX = (peer.targetX ?? peer.x ?? 0) + (peer.vx || 0) * age;
-      const targetY = (peer.targetY ?? peer.y ?? 0) + (peer.vy || 0) * age;
-      const blend = Math.min(1, dt * 22);
-      if(!Number.isFinite(peer.displayX) || Math.abs(targetX - peer.displayX) > 160) peer.displayX = targetX;
-      else peer.displayX += (targetX - peer.displayX) * blend;
-      if(!Number.isFinite(peer.displayY) || Math.abs(targetY - peer.displayY) > 160) peer.displayY = targetY;
-      else peer.displayY += (targetY - peer.displayY) * blend;
+      const age = Math.min(0.12, Math.max(0, (now - (peer.lastSeen || now)) / 1000));
+      const lead = Math.min(0.07, age + 0.03);
+      const targetX = (peer.targetX ?? peer.serverX ?? peer.x ?? 0) + (peer.vx || 0) * lead;
+      const targetY = (peer.targetY ?? peer.serverY ?? peer.y ?? 0) + (peer.vy || 0) * lead;
+      const dist = Math.hypot(targetX - (peer.displayX ?? targetX), targetY - (peer.displayY ?? targetY));
+      const blend = dist > 80 ? Math.min(1, dt * 18) : dist > 24 ? Math.min(1, dt * 13) : Math.min(1, dt * 9.5);
+      peer.displayX = stepToward(peer.displayX, targetX, blend, 180);
+      peer.displayY = stepToward(peer.displayY, targetY, blend, 180);
+      peer.displayAimAngle = lerpAngle(peer.displayAimAngle, peer.targetAimAngle ?? peer.aimAngle ?? ((peer.faceDir||1)<0?Math.PI:0), Math.min(1, dt * 11));
       if((peer.dashTime||0) > 0){
         spawnDashDustAt(peer.displayX||peer.x||0, peer.displayY||peer.y||0, peer.dashVX||0, peer.dashVY||0);
+      }
+    }
+
+    for(const zombie of state.zombies || []){
+      if(!zombie) continue;
+      const age = Math.min(0.12, Math.max(0, (now - (zombie.lastSeen || now)) / 1000));
+      const lead = Math.min(0.06, age + 0.025);
+      const targetX = (zombie.targetX ?? zombie.serverX ?? zombie.x ?? 0) + (zombie.vx || 0) * lead;
+      const targetY = (zombie.targetY ?? zombie.serverY ?? zombie.y ?? 0) + (zombie.vy || 0) * lead;
+      const dist = Math.hypot(targetX - (zombie.displayX ?? targetX), targetY - (zombie.displayY ?? targetY));
+      const blend = dist > 70 ? Math.min(1, dt * 16) : dist > 18 ? Math.min(1, dt * 11.5) : Math.min(1, dt * 8.5);
+      zombie.displayX = stepToward(zombie.displayX, targetX, blend, 140);
+      zombie.displayY = stepToward(zombie.displayY, targetY, blend, 140);
+      zombie.x = zombie.displayX;
+      zombie.y = zombie.displayY;
+      if((Math.abs(zombie.vx || 0) + Math.abs(zombie.vy || 0)) > 4){
+        const moveAngle = Math.atan2(zombie.vy || 0, zombie.vx || ((zombie.faceDir||1) < 0 ? -1 : 1));
+        zombie.displayMoveAngle = lerpAngle(zombie.displayMoveAngle, moveAngle, Math.min(1, dt * 10));
       }
     }
 
@@ -1559,7 +1619,7 @@
     }else if(player.dashTime>0){
       moveWithWallCollision(player,player.dashVX*dt,player.dashVY*dt);
     }else{
-      const moveSpeed = downedLocal ? 60 : player.speed*(player.speedMul||1);
+      const moveSpeed = downedLocal ? 30 : player.speed*(player.speedMul||1);
       moveWithWallCollision(player,mx*moveSpeed*dt,my*moveSpeed*dt);
     }
 
@@ -1762,6 +1822,7 @@
   }
 
   function peerFlashlightAngle(peer){
+    if(Number.isFinite(peer.displayAimAngle)) return peer.displayAimAngle;
     if(Number.isFinite(peer.aimAngle)) return peer.aimAngle;
     if((peer.dashTime||0)>0 && Number.isFinite(peer.dashFacing)) return peer.dashFacing;
     if((peer.rocketJumpTime||0)>0) return Math.atan2(peer.rocketJumpVY||0,peer.rocketJumpVX||peer.faceDir||1);
@@ -2093,7 +2154,7 @@
     const alive = !!peer.alive && !peer.downed && !peer.dead && (peer.hp||0) > 0;
     const look = onlineAppearanceFor(peer.id || peer.name, peer.appearanceIndex);
     if(peer.dead){ return; }
-    const worldMouseAngle = Number.isFinite(peer.aimAngle) ? peer.aimAngle : (((peer.faceDir||1)<0)?Math.PI:0);
+    const worldMouseAngle = Number.isFinite(peer.displayAimAngle) ? peer.displayAimAngle : (Number.isFinite(peer.aimAngle) ? peer.aimAngle : (((peer.faceDir||1)<0)?Math.PI:0));
     let weaponAng = worldMouseAngle;
     const faceDir=(peer.faceDir||1)<0?-1:1;
     const dashFacing = Number.isFinite(peer.dashFacing) ? peer.dashFacing : Math.atan2(peer.dashVY||0, peer.dashVX||faceDir||1);
