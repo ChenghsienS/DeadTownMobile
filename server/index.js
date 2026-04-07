@@ -96,9 +96,18 @@ function makeSeededRng(seed) {
     return s / 4294967296;
   };
 }
+function logServerError(context, err, meta = {}) {
+  const suffix = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
+  console.error(`[DeadTownServer] ${context}${suffix}`, err && err.stack ? err.stack : err);
+}
 function safeSend(ws, payload) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  ws.send(JSON.stringify(payload));
+  try {
+    ws.send(JSON.stringify(payload));
+  } catch (err) {
+    logServerError('safeSend failed', err);
+    try { ws.close(); } catch (_err) {}
+  }
 }
 function getServerLoadStatus() {
   if (clients.size >= MAX_ACTIVE_CLIENTS) return 'full';
@@ -1426,7 +1435,7 @@ function nearestTargetPlayer(room, x, y, downedTargetCounts) {
   if (best && best.downed) downedTargetCounts.set(best.id, (downedTargetCounts.get(best.id) || 0) + 1);
   return { player: best, distance: bestD };
 }
-function updateCharger(room, z, dt) {
+function updateCharger(room, z, dt, downedTargetCounts) {
   const targetData = nearestTargetPlayer(room, z.x, z.y, downedTargetCounts);
   const target = targetData.player;
   if (!target) return;
@@ -1520,7 +1529,7 @@ function updateZombies(room, dt) {
     const z = match.zombies[i];
     z.touchTimer = Math.max(0, (z.touchTimer || 0) - dt);
     if (z.type === 'charger') {
-      updateCharger(room, z, dt);
+      updateCharger(room, z, dt, downedTargetCounts);
     } else if (z.type === 'pouncer' || z.type === 'boss') {
       z.pounceCd -= dt;
       if (z.pounceTime > 0) {
@@ -2039,86 +2048,91 @@ wss.on('connection', (ws) => {
     try { msg = JSON.parse(raw.toString()); } catch (_err) { return; }
     if (!msg || typeof msg.type !== 'string') return;
 
-    if (msg.type === 'hello') {
-      if (typeof msg.name === 'string' && msg.name.trim()) client.name = msg.name.trim().slice(0, 18);
-      if (typeof msg.lang === 'string') client.lang = msg.lang;
-      if (clients.has(client.id)) safeSend(ws, { type: 'room_list', rooms: roomListPayload(), server: serverStatusPayload() });
-      else safeSend(ws, { type: 'queue_status', position: Math.max(1, waitingQueue.findIndex((item) => item && item.id === client.id) + 1 || 1), server: serverStatusPayload({ queued: true }) });
-      return;
-    }
-    if (msg.type === 'list_rooms') {
-      if (clients.has(client.id)) safeSend(ws, { type: 'room_list', rooms: roomListPayload(), server: serverStatusPayload() });
-      else safeSend(ws, { type: 'queue_status', position: Math.max(1, waitingQueue.findIndex((item) => item && item.id === client.id) + 1 || 1), server: serverStatusPayload({ queued: true }) });
-      return;
-    }
-    if (!clients.has(client.id)) {
-      safeSend(ws, { type: 'queue_status', position: Math.max(1, waitingQueue.findIndex((item) => item && item.id === client.id) + 1 || 1), server: serverStatusPayload({ queued: true }) });
-      return;
-    }
-    if (msg.type === 'create_room') {
-      if (client.roomId) removeClientFromRoom(client);
-      const room = createRoom(client, msg.roomName);
-      broadcastRoomState(room, 'room_joined');
-      broadcastRoomList();
-      return;
-    }
-    if (msg.type === 'join_room') {
-      const room = rooms.get(String(msg.roomId || ''));
-      if (!room) { safeSend(ws, { type: 'error', message: 'Room not found.' }); return; }
-      if (room.started) { safeSend(ws, { type: 'error', message: 'Room already started.' }); return; }
-      if (room.players.size >= room.maxPlayers) { safeSend(ws, { type: 'error', message: 'Room is full.' }); return; }
-      if (client.roomId) removeClientFromRoom(client);
-      addClientToRoom(client, room);
-      maybeStartCountdown(room);
-      broadcastRoomState(room, 'room_joined');
-      broadcastRoomList();
-      return;
-    }
-    if (msg.type === 'leave_room') {
-      if (!client.roomId) {
+    try {
+      if (msg.type === 'hello') {
+        if (typeof msg.name === 'string' && msg.name.trim()) client.name = msg.name.trim().slice(0, 18);
+        if (typeof msg.lang === 'string') client.lang = msg.lang;
+        if (clients.has(client.id)) safeSend(ws, { type: 'room_list', rooms: roomListPayload(), server: serverStatusPayload() });
+        else safeSend(ws, { type: 'queue_status', position: Math.max(1, waitingQueue.findIndex((item) => item && item.id === client.id) + 1 || 1), server: serverStatusPayload({ queued: true }) });
+        return;
+      }
+      if (msg.type === 'list_rooms') {
+        if (clients.has(client.id)) safeSend(ws, { type: 'room_list', rooms: roomListPayload(), server: serverStatusPayload() });
+        else safeSend(ws, { type: 'queue_status', position: Math.max(1, waitingQueue.findIndex((item) => item && item.id === client.id) + 1 || 1), server: serverStatusPayload({ queued: true }) });
+        return;
+      }
+      if (!clients.has(client.id)) {
+        safeSend(ws, { type: 'queue_status', position: Math.max(1, waitingQueue.findIndex((item) => item && item.id === client.id) + 1 || 1), server: serverStatusPayload({ queued: true }) });
+        return;
+      }
+      if (msg.type === 'create_room') {
+        if (client.roomId) removeClientFromRoom(client);
+        const room = createRoom(client, msg.roomName);
+        broadcastRoomState(room, 'room_joined');
+        broadcastRoomList();
+        return;
+      }
+      if (msg.type === 'join_room') {
+        const room = rooms.get(String(msg.roomId || ''));
+        if (!room) { safeSend(ws, { type: 'error', message: 'Room not found.' }); return; }
+        if (room.started) { safeSend(ws, { type: 'error', message: 'Room already started.' }); return; }
+        if (room.players.size >= room.maxPlayers) { safeSend(ws, { type: 'error', message: 'Room is full.' }); return; }
+        if (client.roomId) removeClientFromRoom(client);
+        addClientToRoom(client, room);
+        maybeStartCountdown(room);
+        broadcastRoomState(room, 'room_joined');
+        broadcastRoomList();
+        return;
+      }
+      if (msg.type === 'leave_room') {
+        if (!client.roomId) {
+          safeSend(ws, { type: 'left_room' });
+          return;
+        }
+        const oldRoom = rooms.get(client.roomId);
+        removeClientFromRoom(client);
         safeSend(ws, { type: 'left_room' });
+        if (oldRoom && rooms.has(oldRoom.roomId)) {
+          maybeStartCountdown(oldRoom);
+          broadcastRoomState(oldRoom, 'room_update');
+        }
+        broadcastRoomList();
         return;
       }
-      const oldRoom = rooms.get(client.roomId);
-      removeClientFromRoom(client);
-      safeSend(ws, { type: 'left_room' });
-      if (oldRoom && rooms.has(oldRoom.roomId)) {
-        maybeStartCountdown(oldRoom);
-        broadcastRoomState(oldRoom, 'room_update');
-      }
-      broadcastRoomList();
-      return;
-    }
-    if (msg.type === 'toggle_ready') {
-      const room = rooms.get(client.roomId);
-      if (!room || room.started) return;
-      client.ready = !client.ready;
-      maybeStartCountdown(room);
-      broadcastRoomState(room, 'room_update');
-      broadcastRoomList();
-      return;
-    }
-    if (msg.type === 'start_match') {
-      const room = rooms.get(client.roomId);
-      if (!room) return;
-      if (!canStartMatch(room, client.id)) {
-        safeSend(ws, { type: 'error', message: 'Only the host can start when everyone is ready.' });
+      if (msg.type === 'toggle_ready') {
+        const room = rooms.get(client.roomId);
+        if (!room || room.started) return;
+        client.ready = !client.ready;
+        maybeStartCountdown(room);
+        broadcastRoomState(room, 'room_update');
+        broadcastRoomList();
         return;
       }
-      startMatch(room);
-      return;
-    }
-    if (msg.type === 'player_state') {
-      updatePlayerFromClient(client, msg.state || {});
-      return;
-    }
-    if (msg.type === 'player_action') {
-      handlePlayerAction(client, msg.action || {});
-      return;
-    }
-    if (msg.type === 'dev_command') {
-      handleDevCommand(client, msg || {});
-      return;
+      if (msg.type === 'start_match') {
+        const room = rooms.get(client.roomId);
+        if (!room) return;
+        if (!canStartMatch(room, client.id)) {
+          safeSend(ws, { type: 'error', message: 'Only the host can start when everyone is ready.' });
+          return;
+        }
+        startMatch(room);
+        return;
+      }
+      if (msg.type === 'player_state') {
+        updatePlayerFromClient(client, msg.state || {});
+        return;
+      }
+      if (msg.type === 'player_action') {
+        handlePlayerAction(client, msg.action || {});
+        return;
+      }
+      if (msg.type === 'dev_command') {
+        handleDevCommand(client, msg || {});
+        return;
+      }
+    } catch (err) {
+      logServerError('ws message handler failed', err, { clientId: client.id, roomId: client.roomId, messageType: msg.type });
+      safeSend(ws, { type: 'error', message: 'Server error. Please try again.' });
     }
   });
 
@@ -2144,18 +2158,40 @@ wss.on('connection', (ws) => {
 
 setInterval(() => {
   for (const room of rooms.values()) {
-    if (!room.started && room.countdownEndsAt && room.countdownEndsAt <= Date.now()) startMatch(room);
+    try {
+      if (!room.started && room.countdownEndsAt && room.countdownEndsAt <= Date.now()) startMatch(room);
+    } catch (err) {
+      logServerError('countdown tick failed', err, { roomId: room.roomId });
+    }
   }
 }, 100);
 
 setInterval(() => {
   const dt = 1 / TICK_RATE;
-  for (const room of rooms.values()) updateRoom(room, dt);
+  for (const room of rooms.values()) {
+    try {
+      updateRoom(room, dt);
+    } catch (err) {
+      logServerError('room update failed', err, { roomId: room.roomId, started: !!room.started, players: room.players.size });
+    }
+  }
 }, 1000 / TICK_RATE);
 
 setInterval(() => {
-  broadcastSnapshots();
+  try {
+    broadcastSnapshots();
+  } catch (err) {
+    logServerError('broadcastSnapshots failed', err);
+  }
 }, 1000 / SNAPSHOT_RATE);
+
+
+process.on('unhandledRejection', (reason) => {
+  logServerError('unhandledRejection', reason);
+});
+process.on('uncaughtException', (err) => {
+  logServerError('uncaughtException', err);
+});
 
 server.listen(PORT, () => {
   console.log(`DeadTown P0 server listening on http://localhost:${PORT}`);
