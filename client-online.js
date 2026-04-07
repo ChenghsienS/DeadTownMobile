@@ -196,6 +196,8 @@
       queued: false,
       queuePosition: 0,
     },
+    localHitSoundCooldown: 0,
+    localFireZonePulseById: new Map(),
   };
   window.deadtownOnline = online;
 
@@ -442,6 +444,57 @@
     if(!Number.isFinite(x) || !Number.isFinite(y)) return true;
     const listener = onlineAudioListenerPos();
     return dist(listener.x, listener.y, x, y) <= maxDistance;
+  }
+
+  function onlinePlayLocalHitSound(){
+    if((online.localHitSoundCooldown || 0) > 0) return;
+    online.localHitSoundCooldown = 0.04;
+    playHit();
+  }
+
+  function spawnLocalOnlyDamageFeedback(x, y, amount, color='#ffd84d', opts={}){
+    const shown = Number(amount || 0);
+    if(!(shown > 0)) return;
+    addDamageText(x, y, shown, color);
+    if((opts.bloodCount || 0) > 0){
+      blood(x, y + (opts.bloodOffsetY || 10), opts.bloodCount, opts.bloodColor || 'rgba(150,24,24,0.9)', opts.bloodForce || 0.45);
+    }
+    if(opts.hitSound !== false) onlinePlayLocalHitSound();
+  }
+
+  function predictLocalExplosionHitFeedback(x, y, rocket){
+    for(const z of state.zombies){
+      if(!z) continue;
+      const d = dist(x, y, z.x, z.y);
+      const maxRadius = rocket ? 150 : 128;
+      if(d >= maxRadius + (z.radius || 0)) continue;
+      const base = rocket ? (z.type === 'boss' ? 300 : 180) : 90;
+      const dealt = Math.max(8, base - d * (rocket ? 0.9 : 0.65)) * (player.damageMul || 1);
+      spawnLocalOnlyDamageFeedback(z.x + rand(-10,10), z.y - (z.radius || 0) - 10, dealt, '#ffd84d', {
+        bloodCount: rocket ? 5 : 3,
+        bloodColor: rocket ? 'rgba(180,60,24,0.9)' : 'rgba(150,24,24,0.82)',
+        bloodForce: rocket ? 0.7 : 0.45,
+      });
+    }
+  }
+
+  function predictLocalFireZoneHitFeedback(zone){
+    if(!zone || zone.ownerId !== online.clientId) return;
+    const prevTick = online.localFireZonePulseById.get(zone.id);
+    const currentTick = Number(zone.hitTick || 0);
+    const pulsed = prevTick == null ? currentTick > 0.15 : currentTick > prevTick + 0.05;
+    online.localFireZonePulseById.set(zone.id, currentTick);
+    if(!pulsed) return;
+    const dealt = 18 * (player.damageMul || 1);
+    for(const z of state.zombies){
+      if(!z) continue;
+      if(dist(zone.x, zone.y, z.x, z.y) >= (zone.radius || 0) + (z.radius || 0)) continue;
+      spawnLocalOnlyDamageFeedback(z.x + rand(-16,16), z.y - (z.radius || 0) - 10, dealt, '#ffd84d', {
+        bloodCount: 2,
+        bloodColor: 'rgba(255,120,40,0.7)',
+        bloodForce: 0.25,
+      });
+    }
   }
 
   function playOnlineSoundFx(fx, selfId){
@@ -776,7 +829,10 @@
     online.syncedShotFx = Array.isArray(match.shotFx) ? match.shotFx.map(fx=>Object.assign({}, fx)) : [];
     online.syncedFlameFx = Array.isArray(match.flameFx) ? match.flameFx.map(fx=>Object.assign({}, fx)) : [];
     online.tombstones = Array.isArray(match.tombstones) ? match.tombstones.map(t=>Object.assign({}, t)) : [];
-    state.damageTexts = Array.isArray(match.damageTexts) ? match.damageTexts.map(t=>Object.assign({}, t)) : [];
+    const activeZoneIds = new Set(Array.isArray(match.fireZones) ? match.fireZones.map(z=>z && z.id).filter(id=>id != null) : []);
+    for(const seenId of Array.from(online.localFireZonePulseById.keys())){
+      if(!activeZoneIds.has(seenId)) online.localFireZonePulseById.delete(seenId);
+    }
     updateHUD();
   }
 
@@ -1254,6 +1310,11 @@
         if(dist(z.x,z.y,p.x,p.y) < z.radius + (p.radius||2) + 1){
           p.hitIds = p.hitIds || [];
           p.hitIds.push(z.id);
+          spawnLocalOnlyDamageFeedback(z.x+rand(-10,10), z.y-z.radius-10, p.damage || 0, '#ffd84d', {
+            bloodCount: 2,
+            bloodColor: 'rgba(150,24,24,0.78)',
+            bloodForce: 0.3,
+          });
           if(p.penetration != null){
             p.penetration -= 1;
             if(p.penetration <= 0){ pelletArray.splice(i,1); }
@@ -1320,6 +1381,7 @@
       if(g.timer<=0){
         g.x=g.targetX; g.y=g.targetY; g.drawX=g.targetX; g.drawY=g.targetY;
         state.explosions.push({x:g.x,y:g.y,radius:0,maxRadius:g.type==='molotov'?84:128,life:g.type==='molotov'?0.34:0.42,maxLife:g.type==='molotov'?0.34:0.42,ring:0,rocket:false,molotov:g.type==='molotov'});
+        if(g.type !== 'molotov') predictLocalExplosionHitFeedback(g.x, g.y, false);
         state.grenades.splice(i,1);
       }
     }
@@ -1350,7 +1412,9 @@
         }
       }
       if(done){
-        state.explosions.push({x:clamp(r.x,10,WORLD.w-10),y:clamp(r.y,10,WORLD.h-10),radius:0,maxRadius:150,life:0.56,maxLife:0.56,ring:0,rocket:true});
+        const ex=clamp(r.x,10,WORLD.w-10), ey=clamp(r.y,10,WORLD.h-10);
+        state.explosions.push({x:ex,y:ey,radius:0,maxRadius:150,life:0.56,maxLife:0.56,ring:0,rocket:true});
+        predictLocalExplosionHitFeedback(ex, ey, true);
         state.rockets.splice(i,1);
       }
     }
@@ -1362,12 +1426,25 @@
       f.x+=f.vx*dt; f.y+=f.vy*dt;
       const flameDamping=Math.pow(FLAME_VELOCITY_DAMPING_PER_SECOND,dt);
       f.vx*=flameDamping; f.vy*=flameDamping; f.vy-=30*dt*(f.heat||1);
-      f.life-=dt; f.size+=dt*8; f.swirl=(f.swirl||0)*Math.pow(0.7,dt*60);
+      f.life-=dt; f.hitTick=(f.hitTick||0)-dt; f.size+=dt*8; f.swirl=(f.swirl||0)*Math.pow(0.7,dt*60);
       for(const b of WORLD.buildings){
         for(const wr of getBuildingWallRects(b)){
           if(circleRectCollision(f.x,f.y,f.size*0.35,wr)){ f.life=0; break; }
         }
         if(f.life<=0) break;
+      }
+      if(f.life>0){
+        for(let j=state.zombies.length-1;j>=0;j--){
+          const z=state.zombies[j];
+          if(dist(z.x,z.y,f.x,f.y)<z.radius+f.size && f.hitTick<=0){
+            spawnLocalOnlyDamageFeedback(z.x+rand(-16,16), z.y-z.radius-10, f.damage || 0.8, '#ffd84d', {
+              bloodCount: 2,
+              bloodColor: 'rgba(255,120,40,0.7)',
+              bloodForce: 0.22,
+            });
+            f.hitTick=0.06;
+          }
+        }
       }
       if(f.life<=0) state.flameParticles.splice(i,1);
     }
@@ -1413,6 +1490,7 @@
     state.buffAnnouncementTimer=Math.max(0,state.buffAnnouncementTimer-dt);
     state.cameraShake=Math.max(0,state.cameraShake-dt*18);
     state.screenFlash=Math.max(0,state.screenFlash-dt*1.2);
+    online.localHitSoundCooldown = Math.max(0, (online.localHitSoundCooldown || 0) - dt);
     state.bossAnnouncement=Math.max(0,state.bossAnnouncement-dt);
     state.airdropAnnouncement=Math.max(0,state.airdropAnnouncement-dt);
     localReloadPredict(dt);
@@ -1497,6 +1575,7 @@
 
     updateOnlineRemoteVisuals(dt);
     updateOnlineVisualProjectiles(dt);
+    for(const zone of state.fireZones){ predictLocalFireZoneHitFeedback(zone); }
     if(player.dashTime>0) spawnDashDustAt(player.x, player.y, player.dashVX||0, player.dashVY||0);
     emitOnlineFireZoneParticles();
     updateBuildingRoofs();
