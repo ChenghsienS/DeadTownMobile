@@ -1789,7 +1789,8 @@ function drawPlayer(cam){
   drawRotatedGun(x,y+4,weaponAng, player.weapon==='gatling'?'#545f66':player.weapon==='rocket'?'#5a646f':player.weapon==='flamethrower'?'#7a7a7a':'#7d614f', '#2c2c2c', player.weapon);
 }
 function drawZombie(z,cam){const s=worldToScreen(z.x,z.y,cam),x=px(s.x),y=px(s.y);if(z.type==='boss'){pxRect(x-16,y-18,32,22,z.skin);pxRect(x-18,y+2,36,18,z.shirt);pxRect(x-18,y+18,8,10,'#242424');pxRect(x+10,y+18,8,10,'#242424');pxRect(x-6,y-8,3,3,'#180f0f');pxRect(x+3,y-8,3,3,'#180f0f');pxRect(x+8,y-2,5,3,'#8a1414');return;}if(z.type==='charger'){pxRect(x-8,y-10,16,12,z.skin);pxRect(x-10,y+2,20,11,z.shirt);pxRect(x-10,y+13,5,7,'#242424');pxRect(x+5,y+13,5,7,'#242424');pxRect(x-6,y-14,12,3,z.state==='windup'?'#d8b36a':'#8f3a2a');}else if(z.type==='bloater'){pxRect(x-10,y-8,20,16,z.skin);pxRect(x-8,y+8,16,8,z.shirt);}else if(z.type==='crawler'){pxRect(x-8,y-4,16,8,z.skin);pxRect(x-7,y+4,14,5,z.shirt);}else{pxRect(x-6,y-8,12,10,z.skin);pxRect(x-7,y+2,14,10,z.shirt);pxRect(x-7,y+12,4,6,'#242424');pxRect(x+3,y+12,4,6,'#242424');}pxRect(x-3,y-4,2,2,'#180f0f');pxRect(x+1,y-4,2,2,'#180f0f');pxRect(x+4,y-1,3,2,'#8a1414');if(z.type==='pouncer')pxRect(x-9,y-12,18,3,'#a89489');}
-function drawZombies(cam){for(const z of state.zombies){if(!(z.x<cam.x-60||z.y<cam.y-60||z.x>cam.x+SW+60||z.y>cam.y+SH+60))drawZombie(z,cam);}}
+function buildingRoofOccludesEntity(entity){for(const b of WORLD.buildings){if((b.roofAlpha||0)>0.55&&entityInsideBuildingForRoof(entity,b))return true;}return false;}
+function drawZombies(cam){for(const z of state.zombies){if(z.x<cam.x-60||z.y<cam.y-60||z.x>cam.x+SW+60||z.y>cam.y+SH+60)continue;if(buildingRoofOccludesEntity(z))continue;drawZombie(z,cam);}}
 function drawPellets(cam){ctx.fillStyle='#ffd69c';for(const p of state.pellets){if(p.x<cam.x||p.y<cam.y||p.x>cam.x+SW||p.y>cam.y+SH)continue;const s=worldToScreen(p.x,p.y,cam);ctx.fillRect(px(s.x),px(s.y),2,2);}}
 function drawRockets(cam){for(const r of state.rockets){if(r.x<cam.x-40||r.y<cam.y-40||r.x>cam.x+SW+40||r.y>cam.y+SH+40)continue;const s=worldToScreen(r.x,r.y,cam);const ang=Math.atan2(r.vy,r.vx);ctx.save();ctx.translate(s.x,s.y);ctx.rotate(ang);pxRect(-7,-2,12,4,'#78838d');pxRect(5,-1,4,2,'#ff8c44');pxRect(-9,-3,3,6,'#59626a');ctx.restore();}}
 function drawGrenades(cam){for(const g of state.grenades){if(g.x<cam.x-20||g.y<cam.y-20||g.x>cam.x+SW+20||g.y>cam.y+SH+20)continue;const sh=worldToScreen(g.x,g.y,cam);pxRect(sh.x-4,sh.y-2,8,4,'rgba(0,0,0,0.28)');const s=worldToScreen(g.drawX,g.drawY,cam);if(g.type==='molotov'){pxRect(s.x-2,s.y-6,4,8,'#7b4a22');pxRect(s.x-1,s.y-8,2,3,'#cfd26c');}else{pxRect(s.x-3,s.y-3,6,6,'#556b4d');}}}
@@ -1827,6 +1828,7 @@ function drawBossHealthBars(cam){
   const prevAlign=ctx.textAlign;
   for(const boss of bosses){
     if(boss.x<cam.x-140||boss.y<cam.y-140||boss.x>cam.x+SW+140||boss.y>cam.y+SH+140) continue;
+    if(buildingRoofOccludesEntity(boss)) continue;
     const s=worldToScreen(boss.x,boss.y,cam);
     const w=72,h=8,x=s.x-w/2,y=s.y-boss.radius-22;
     pxRect(x,y,w,h,'rgba(0,0,0,0.55)');

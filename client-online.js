@@ -428,11 +428,11 @@
     if(kind === 'shotgun'){
       onlineToneAtSource('square',145,t,0.22,0.24,x,y,1200); onlineToneAtSource('triangle',62,t+0.015,0.28,0.16,x,y,1200); onlineHissAtSource(920,t,0.18,0.23,x,y,1200);
     }else if(kind === 'gatling'){
-      onlineToneAtSource('square',255,t,0.08,0.13,x,y,1050); onlineToneAtSource('triangle',122,t+0.01,0.07,0.08,x,y,1050); onlineHissAtSource(1750,t,0.06,0.10,x,y,1050);
+      onlineToneAtSource('square',255,t,0.12,0.13,x,y,1050); onlineToneAtSource('triangle',122,t+0.01,0.11,0.08,x,y,1050); onlineHissAtSource(1750,t,0.11,0.10,x,y,1050);
     }else if(kind === 'rocket'){
       onlineToneAtSource('sawtooth',108,t,0.34,0.18,x,y,1300); onlineToneAtSource('triangle',52,t+0.02,0.44,0.22,x,y,1300); onlineHissAtSource(360,t,0.32,0.28,x,y,1300);
     }else if(kind === 'flamethrower'){
-      onlineToneAtSource('sawtooth',220,t,0.07,0.045,x,y,900); onlineHissAtSource(1450,t,0.08,0.075,x,y,900); onlineHissAtSource(650,t,0.08,0.035,x,y,900);
+      onlineToneAtSource('sawtooth',220,t,0.16,0.042,x,y,900); onlineHissAtSource(1450,t,0.18,0.078,x,y,900); onlineHissAtSource(650,t,0.16,0.036,x,y,900);
     }
   }
 
@@ -485,7 +485,7 @@
       const weapon = fx.weapon || 'shotgun';
       const cooldownKey = `${fx.ownerId || 'remote'}:${weapon}`;
       const now = performance.now();
-      const minGap = weapon === 'gatling' ? 80 : weapon === 'flamethrower' ? 100 : weapon === 'rocket' ? 240 : 160;
+      const minGap = weapon === 'gatling' ? 34 : weapon === 'flamethrower' ? 42 : weapon === 'rocket' ? 240 : 160;
       const lastAt = online.remoteAudioCooldowns.get(cooldownKey) || 0;
       if((now - lastAt) < minGap) continue;
       online.remoteAudioCooldowns.set(cooldownKey, now);
@@ -855,7 +855,15 @@
 
   function onlineAudioListenerPos(){
     const target = onlineSpectateTarget();
-    if(target && online.spectating) return { x: target.displayX ?? target.x ?? player.x, y: target.displayY ?? target.y ?? player.y };
+    if(target && (online.spectating || online.selfDead)){
+      return {
+        x: target.displayX ?? target.x ?? online.cameraFocusX ?? player.x,
+        y: target.displayY ?? target.y ?? online.cameraFocusY ?? player.y,
+      };
+    }
+    if((online.spectating || online.selfDead) && Number.isFinite(online.cameraFocusX) && Number.isFinite(online.cameraFocusY)){
+      return { x: online.cameraFocusX, y: online.cameraFocusY };
+    }
     return { x: player.x, y: player.y };
   }
 
@@ -2427,8 +2435,11 @@
     tctx.fillRect(0,0,SW,SH);
     tctx.globalCompositeOperation = 'destination-out';
 
-    const selfPos = worldToScreen(player.x, player.y, cam);
-    carveFlashlight(tctx, selfPos.x, selfPos.y, localFlashlightAngle(cam), { length: 560, nearW: 60, farW: 230, halo: 96 });
+    const selfLightEnabled = !state.gameOver && state.deathAnim <= 0 && !(online.connected && online.started && onlineIsMode() && (online.selfDead || online.spectating));
+    if(selfLightEnabled){
+      const selfPos = worldToScreen(player.x, player.y, cam);
+      carveFlashlight(tctx, selfPos.x, selfPos.y, localFlashlightAngle(cam), { length: 560, nearW: 60, farW: 230, halo: 96 });
+    }
 
     if(online.connected && online.started && onlineIsMode()){
       for(const peer of Object.values(online.peers || {})){
