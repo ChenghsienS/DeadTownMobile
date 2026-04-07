@@ -7,6 +7,7 @@ const PORT = Number(process.env.PORT || 8080);
 const TICK_RATE = 60;
 const SNAPSHOT_RATE = 20;
 const SNAPSHOT_BUFFER_LIMIT = 256 * 1024;
+const PLAYER_NAME_MAX_LENGTH = 25;
 const SNAPSHOT_PROJECTILE_CAP = 140;
 const SNAPSHOT_VISUAL_FX_CAP = 48;
 const ROOM_MAX_PLAYERS = 6;
@@ -1850,7 +1851,7 @@ function updatePlayerFromClient(client, state) {
   const nowMs = Date.now();
   const elapsed = clamp((nowMs - (player.lastStateAt || nowMs)) / 1000, 1 / 120, 0.2);
   player.lastStateAt = nowMs;
-  if (typeof state.name === 'string' && state.name.trim()) client.name = state.name.trim().slice(0, 18);
+  if (typeof state.name === 'string' && state.name.trim()) client.name = state.name.trim().slice(0, PLAYER_NAME_MAX_LENGTH);
   if (Number.isFinite(state.seq)) player.lastInputSeq = Math.max(player.lastInputSeq || 0, Math.floor(Number(state.seq) || 0));
   if (player.dead) {
     player.moving = false;
@@ -2058,7 +2059,7 @@ wss.on('connection', (ws) => {
 
     try {
       if (msg.type === 'hello') {
-        if (typeof msg.name === 'string' && msg.name.trim()) client.name = msg.name.trim().slice(0, 18);
+        if (typeof msg.name === 'string' && msg.name.trim()) client.name = msg.name.trim().slice(0, PLAYER_NAME_MAX_LENGTH);
         if (typeof msg.lang === 'string') client.lang = msg.lang;
         if (clients.has(client.id)) safeSend(ws, { type: 'room_list', rooms: roomListPayload(), server: serverStatusPayload() });
         else safeSend(ws, { type: 'queue_status', position: Math.max(1, waitingQueue.findIndex((item) => item && item.id === client.id) + 1 || 1), server: serverStatusPayload({ queued: true }) });

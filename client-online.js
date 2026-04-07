@@ -205,6 +205,36 @@
   window.deadtownOnline = online;
 
   function ot(){ return ONLINE_T[lang] || ONLINE_T.en; }
+
+  function roomDisplayNameMap(room){
+    const map = new Map();
+    const players = Array.isArray(room?.players) ? room.players : [];
+    const groups = new Map();
+    for(const p of players){
+      if(!p || !p.id) continue;
+      const base = String(p.name || 'Player').trim() || 'Player';
+      if(!groups.has(base)) groups.set(base, []);
+      groups.get(base).push(p.id);
+    }
+    for(const [base, ids] of groups.entries()){
+      if(ids.length <= 1){
+        map.set(ids[0], base);
+        continue;
+      }
+      ids.forEach((id, index)=> map.set(id, `${base} ${String(index + 1).padStart(2,'0')}`));
+    }
+    return map;
+  }
+
+  function onlineDisplayNameForId(playerId, fallbackName='Player'){
+    if(!playerId) return String(fallbackName || 'Player');
+    const mapped = roomDisplayNameMap(online.roomState).get(playerId);
+    return mapped || String(fallbackName || 'Player');
+  }
+
+  function onlinePlayerNameEditorMarkup(){
+    return typeof window.playerNameEditorMarkup === 'function' ? window.playerNameEditorMarkup('margin-top:0;margin-bottom:14px;') : '';
+  }
   function onlineIsMode(){ return online.gameMode === 'online'; }
   function lerpAngle(a, b, t){
     if(!Number.isFinite(a)) return Number.isFinite(b) ? b : 0;
@@ -978,7 +1008,7 @@
     }
     if(msg.type === 'player_left'){
       if(msg.playerId) delete online.peers[msg.playerId];
-      const playerLabel = msg.name || (lang==='zh' ? '玩家' : 'A player');
+      const playerLabel = onlineDisplayNameForId(msg.playerId, msg.name || (lang==='zh' ? '玩家' : 'A player'));
       const leaveText = online.started
         ? (lang==='zh' ? `${playerLabel} 已退出对局。` : `${playerLabel} left the match.`)
         : (lang==='zh' ? `${playerLabel} 已退出房间。` : `${playerLabel} left the room.`);
@@ -987,14 +1017,14 @@
     }
     if(msg.type === 'player_down'){
       if(msg.playerId && msg.playerId !== online.clientId){
-        const playerLabel = msg.name || (lang==='zh' ? '队友' : 'A teammate');
+        const playerLabel = onlineDisplayNameForId(msg.playerId, msg.name || (lang==='zh' ? '队友' : 'A teammate'));
         pushOnlineNotice(lang==='zh' ? `${playerLabel} 已倒地。` : `${playerLabel} is down.`, 'warn', 2200);
       }
       return;
     }
     if(msg.type === 'player_dead'){
       if(msg.playerId && msg.playerId !== online.clientId){
-        const playerLabel = msg.name || (lang==='zh' ? '队友' : 'A teammate');
+        const playerLabel = onlineDisplayNameForId(msg.playerId, msg.name || (lang==='zh' ? '队友' : 'A teammate'));
         pushOnlineNotice(lang==='zh' ? `${playerLabel} 已死亡。` : `${playerLabel} died.`, 'warn', 2200);
       }
       return;
@@ -1054,6 +1084,7 @@
       <h2>${t.onlineTitle}</h2>
       <p>${t.onlineDesc}</p>
       <p class="compactNote"><span class="accent">${t.onlineNoLeaderboard}</span></p>
+      ${onlinePlayerNameEditorMarkup()}
       <div style="text-align:left;margin:14px 0;padding:12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);">
         <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;flex:1;">
@@ -1090,6 +1121,7 @@
       const back = $('onlineBackBtn'); if(back) back.onclick = ()=>{ onlineDisconnect(true, true); state.menuScreen='main'; online.gameMode='single'; applyLang(); };
       const create = $('onlineCreateBtn'); if(create) create.onclick = ()=>createOnlineRoom();
       const refresh = $('onlineRefreshBtn'); if(refresh) refresh.onclick = ()=>refreshOnlineRooms();
+      if(typeof window.bindPlayerNameEditor === 'function') window.bindPlayerNameEditor();
       document.querySelectorAll('[data-join-room]').forEach(btn=>btn.onclick = ()=>joinOnlineRoom(btn.getAttribute('data-join-room')));
       onlineEnsureConnected();
     },0);
@@ -1106,12 +1138,15 @@
     const isHost = online.clientId === room.hostId;
     const canStartWithCurrentPlayers = (room.players?.length || 0) >= 2;
     const countdownLeft = room.countdownEndsAt ? Math.max(0, Math.ceil((room.countdownEndsAt - Date.now())/1000)) : 0;
-    const playersMarkup = (room.players||[]).map(p=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-top:1px solid rgba(255,255,255,0.08);"><span>${escapeHtml(p.name)} ${p.id===room.hostId?`<span class="accent">(${t.host})</span>`:''}</span><span style="opacity:0.72;">${room.started?t.inGame:(p.ready?t.readyStatus:t.unreadyStatus)}</span></div>`).join('');
+    const displayNameMap = roomDisplayNameMap(room);
+    const hostDisplayName = displayNameMap.get(room.hostId) || room.hostName || 'Player';
+    const playersMarkup = (room.players||[]).map(p=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-top:1px solid rgba(255,255,255,0.08);"><span>${escapeHtml(displayNameMap.get(p.id) || p.name || 'Player')} ${p.id===room.hostId?`<span class="accent">(${t.host})</span>`:''}</span><span style="opacity:0.72;">${room.started?t.inGame:(p.ready?t.readyStatus:t.unreadyStatus)}</span></div>`).join('');
     $('overlayCard').className='card';
     $('overlayCard').innerHTML = `
       <div class="accent" style="font-size:32px;font-weight:bold;line-height:1.15;margin-bottom:12px;">${escapeHtml(room.roomName)}</div>
-      <p style="opacity:0.75;">${t.onlineRoomOwner}: <span class="accent">${escapeHtml(room.hostName)}</span></p>
+      <p style="opacity:0.75;">${t.onlineRoomOwner}: <span class="accent">${escapeHtml(hostDisplayName)}</span></p>
       <p style="opacity:0.75;">${t.onlinePlayersLabel}: ${room.players.length}/${room.maxPlayers}</p>
+      ${onlinePlayerNameEditorMarkup()}
       ${room.countdownEndsAt?`<p class="accent" style="font-size:20px;letter-spacing:1px;">${t.autoStarting} ${countdownLeft}</p>`:''}
       <div style="text-align:left;margin:14px 0;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);">${playersMarkup}</div>
       <div class="controls" style="justify-content:center;flex-wrap:wrap;">
@@ -1125,6 +1160,7 @@
     setTimeout(()=>{
       const leave = $('onlineLeaveBtn'); if(leave) leave.onclick = ()=>leaveOnlineRoom();
       const ready = $('onlineReadyBtn'); if(ready) ready.onclick = ()=>toggleOnlineReady();
+      if(typeof window.bindPlayerNameEditor === 'function') window.bindPlayerNameEditor();
       const start = $('onlineStartBtn'); if(start) start.onclick = ()=>startOnlineMatch();
     },0);
   }
@@ -1144,7 +1180,7 @@
     const players = Array.isArray(safeSummary.players) ? safeSummary.players.slice().sort((a,b)=> (b.score||0) - (a.score||0)) : [];
     state.overlayScreen = 'online-summary';
     $('overlayCard').className='card';
-    const rows = players.map((p)=>`<tr><td style="padding:6px 8px;text-align:left;">${escapeHtml(p.name || 'Player')}</td><td style="padding:6px 8px;">${Math.round(p.score||0)}</td><td style="padding:6px 8px;">${Math.round(p.kills||0)}</td><td style="padding:6px 8px;">${formatOnlineTime(p.surviveTime||0)}</td></tr>`).join('');
+    const rows = players.map((p)=>`<tr><td style="padding:6px 8px;text-align:left;">${escapeHtml(onlineDisplayNameForId(p.id, p.name || 'Player'))}</td><td style="padding:6px 8px;">${Math.round(p.score||0)}</td><td style="padding:6px 8px;">${Math.round(p.kills||0)}</td><td style="padding:6px 8px;">${formatOnlineTime(p.surviveTime||0)}</td></tr>`).join('');
     $('overlayCard').innerHTML = `
       <h2>${t.onlineSummaryTitle}</h2>
       <p>${escapeHtml(message || t.onlineSummaryDesc)}</p>
@@ -1772,8 +1808,8 @@
   function getOnlineScoreEntries(){
     const entries = [];
     const selfScore = Number.isFinite(state.score) ? state.score : (Number.isFinite(player.score) ? player.score : 0);
-    entries.push({ id: online.clientId || 'self', name: state.playerName || 'Player', score: Math.round(selfScore || 0) });
-    for(const peer of Object.values(online.peers || {})) entries.push({ id: peer.id, name: peer.name || 'Player', score: Math.round(peer.score || 0) });
+    entries.push({ id: online.clientId || 'self', name: onlineDisplayNameForId(online.clientId || 'self', state.playerName || 'Player'), score: Math.round(selfScore || 0) });
+    for(const peer of Object.values(online.peers || {})) entries.push({ id: peer.id, name: onlineDisplayNameForId(peer.id, peer.name || 'Player'), score: Math.round(peer.score || 0) });
     entries.sort((a,b)=>{
       const ds = (b.score||0) - (a.score||0);
       if(ds) return ds;
@@ -2084,7 +2120,7 @@
   function drawStyledSurvivorBody(x, y, baseX, baseY, look, opts){ const alive = !!opts.alive; const faceDir = (opts.faceDir||1)<0 ? -1 : 1; const weapon = opts.weapon || 'shotgun'; const weaponAng = Number.isFinite(opts.weaponAng) ? opts.weaponAng : (faceDir<0?Math.PI:0); const jumpVisual = opts.jumpVisual || { lift:0, shadowScale:1 }; const bodyColor = alive ? look.coat : '#545454'; const legsColor = alive ? look.legs : '#3c3c3c'; const faceColor = alive ? (opts.hurt ? look.hurt : look.face) : '#9a9a9a'; const hairColor = alive ? look.hair : '#666666'; const ember = alive ? '#ff7a1a' : '#8b8b8b'; const muzzleWood = alive ? look.detail : '#666666'; const gunBody = weapon==='gatling' ? '#545f66' : weapon==='rocket' ? '#5a646f' : weapon==='flamethrower' ? '#7a7a7a' : (look.gunBody || '#7d614f'); const gunTrim = look.gunTrim || '#2c2c2c'; pxRect(baseX-11*(jumpVisual.shadowScale||1),baseY+12,22*(jumpVisual.shadowScale||1),5,'rgba(0,0,0,0.2)'); if(opts.spinMode){ const spin = opts.spin || 0; ctx.save(); ctx.translate(x,y+3); ctx.rotate(spin); pxRect(-7,-6,14,5,hairColor); pxRect(-8,-3,16,7,faceColor); pxRect(6,-1,6,2,muzzleWood); pxRect(11,-1,2,2,ember); pxRect(-8,4,16,8,bodyColor); pxRect(-10,2,3,10,legsColor); pxRect(7,2,3,10,legsColor); if(look.accessory==='bandolier'){ pxRect(-5,4,2,7,alive?look.accent:'#666'); pxRect(-1,3,2,7,alive?look.detail:'#555'); pxRect(3,2,2,7,alive?look.accent:'#666'); } else if(look.accessory==='poncho'){ pxRect(-8,3,16,3,alive?look.accent:'#666'); } else if(look.accessory==='hood'){ pxRect(-8,-6,16,2,alive?look.accent:'#666'); } drawRotatedGun(0,4,spin,gunBody,gunTrim,weapon); ctx.restore(); return; } pxRect(x-6,y-8,12,10,faceColor); pxRect(x-6,y-10,12,3,hairColor); pxRect(x-5,y-6,10,3,'#0a0a0a'); drawSurvivorAccessory(x, y, faceDir, look, alive); if(faceDir>0){ pxRect(x+5,y-3,5,2,muzzleWood); pxRect(x+10,y-3,2,2,ember); } else { pxRect(x-10,y-3,5,2,muzzleWood); pxRect(x-12,y-3,2,2,ember); } pxRect(x-5,y+2,10,9,bodyColor); pxRect(x-7,y+10,4,6,legsColor); pxRect(x+3,y+10,4,6,legsColor); if(alive) drawRotatedGun(x,y+4,weaponAng,gunBody,gunTrim,weapon); }
   function drawDownedSurvivorBody(x,y,baseX,baseY,look,faceDir,name,progress){ pxRect(baseX-10,baseY+12,20,5,'rgba(0,0,0,0.18)'); pxRect(x-11,y+5,18,7,look.coat); pxRect(x-1,y+2,10,5,look.legs); pxRect(x-10,y+1,9,6,look.face); pxRect(x-10,y-1,10,2,look.hair); pxRect(x-12,y+5,3,6,look.detail); ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.font='12px Courier New'; ctx.textAlign='center'; ctx.fillText(String(name||'Player'),x+1,y-15); ctx.fillStyle='#f0d39c'; ctx.fillText(String(name||'Player'),x,y-16); const barW=28; pxRect(x-barW/2,y-28,barW,4,'rgba(255,255,255,0.12)'); pxRect(x-barW/2,y-28,barW*Math.max(0,Math.min(1,progress||0)),4,'#f0d39c'); }
   function drawTombstoneAt(t, cam){ const s=worldToScreen(t.x||0,t.y||0,cam),x=px(s.x),y=px(s.y); pxRect(x-7,y-16,14,18,'#68625b'); pxRect(x-5,y-14,10,14,'#7b746c'); pxRect(x-2,y+2,4,9,'#4f4943'); pxRect(x-8,y+2,16,2,'rgba(36,32,28,0.25)'); ctx.fillStyle='rgba(0,0,0,0.18)'; ctx.fillRect(x-11,y+10,22,4); }
-  function drawStyledLocalPlayer(cam){ const look = onlineAppearanceFor(online.clientId || state.playerName, player.onlineAppearanceIndex); const s=worldToScreen(player.x,player.y,cam),baseX=px(s.x),baseY=px(s.y); const jumpVisual=getPlayerJumpVisual(),lift=jumpVisual.lift; const x=baseX,y=px(baseY-lift); if(player.dead){ return; } if(player.downed){ drawDownedSurvivorBody(x,y,baseX,baseY,look,player.faceDir,state.playerName,(player.reviveProgress||0)/5); return; } if(state.deathAnim>0){ const collapse=(1.4-state.deathAnim)/1.4; pxRect(baseX-8,baseY-2+collapse*10,16,4,'#7b1b1b'); pxRect(baseX-4,baseY+2+collapse*10,8,6,look.coat); return; } const worldMouseX=cam.x+state.mouse.x,worldMouseY=cam.y+state.mouse.y; const aimAng=Math.atan2(worldMouseY-player.y,worldMouseX-player.x); const mobileAimActive = MOBILE_MODE && touchState.aim.active && Math.hypot(touchState.aim.dx,touchState.aim.dy)>12; let weaponAng=aimAng; if(MOBILE_MODE && !mobileAimActive){ if(player.dashTime>0) weaponAng=player.dashFacing; else if(player.rocketJumpTime>0) weaponAng=Math.atan2(player.rocketJumpVY||0,player.rocketJumpVX||player.faceDir||1); else if(player.knockbackTime>0) weaponAng=Math.atan2(player.knockbackVY||0,player.knockbackVX||player.faceDir||1); else if(Math.hypot(touchState.move.dx,touchState.move.dy)>6) weaponAng=Math.atan2(touchState.move.dy,touchState.move.dx); else weaponAng=(player.faceDir||1)<0?Math.PI:0; } const moveAng=player.dashTime>0?player.dashFacing:player.rocketJumpTime>0?Math.atan2(player.rocketJumpVY||0,player.rocketJumpVX||1):weaponAng; if(player.dashTime>0||player.rocketJumpTime>0){ for(let i=3;i>=1;i--){ const trailX=x-Math.cos(moveAng)*i*7,trailY=y-Math.sin(moveAng)*i*7; ctx.fillStyle=`rgba(255,190,120,${0.09*i})`; ctx.fillRect(px(trailX-7),px(trailY-7),14,18); } } ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.font='12px Courier New'; ctx.textAlign='center'; ctx.fillText(state.playerName,x+1,y-15); ctx.fillStyle='#f0e6d8'; ctx.fillText(state.playerName,x,y-16); if(player.dashTime>0||player.rocketJumpTime>0){ const spinBase=player.dashTime>0?1-(player.dashTime/0.18):1-(player.rocketJumpTime/ROCKET_JUMP_DURATION); const spin=spinBase*Math.PI*2*player.dashSpinDir; drawStyledSurvivorBody(x,y,baseX,baseY,look,{alive:true,hurt:player.hurtTimer>0,faceDir:player.faceDir,weapon:player.weapon,weaponAng,spinMode:true,spin,jumpVisual}); return; } drawStyledSurvivorBody(x,y,baseX,baseY,look,{alive:true,hurt:player.hurtTimer>0,faceDir:player.faceDir,weapon:player.weapon,weaponAng,jumpVisual}); }
+  function drawStyledLocalPlayer(cam){ const look = onlineAppearanceFor(online.clientId || state.playerName, player.onlineAppearanceIndex); const s=worldToScreen(player.x,player.y,cam),baseX=px(s.x),baseY=px(s.y); const jumpVisual=getPlayerJumpVisual(),lift=jumpVisual.lift; const x=baseX,y=px(baseY-lift); if(player.dead){ return; } if(player.downed){ drawDownedSurvivorBody(x,y,baseX,baseY,look,player.faceDir,onlineDisplayNameForId(online.clientId || 'self', state.playerName),(player.reviveProgress||0)/5); return; } if(state.deathAnim>0){ const collapse=(1.4-state.deathAnim)/1.4; pxRect(baseX-8,baseY-2+collapse*10,16,4,'#7b1b1b'); pxRect(baseX-4,baseY+2+collapse*10,8,6,look.coat); return; } const worldMouseX=cam.x+state.mouse.x,worldMouseY=cam.y+state.mouse.y; const aimAng=Math.atan2(worldMouseY-player.y,worldMouseX-player.x); const mobileAimActive = MOBILE_MODE && touchState.aim.active && Math.hypot(touchState.aim.dx,touchState.aim.dy)>12; let weaponAng=aimAng; if(MOBILE_MODE && !mobileAimActive){ if(player.dashTime>0) weaponAng=player.dashFacing; else if(player.rocketJumpTime>0) weaponAng=Math.atan2(player.rocketJumpVY||0,player.rocketJumpVX||player.faceDir||1); else if(player.knockbackTime>0) weaponAng=Math.atan2(player.knockbackVY||0,player.knockbackVX||player.faceDir||1); else if(Math.hypot(touchState.move.dx,touchState.move.dy)>6) weaponAng=Math.atan2(touchState.move.dy,touchState.move.dx); else weaponAng=(player.faceDir||1)<0?Math.PI:0; } const moveAng=player.dashTime>0?player.dashFacing:player.rocketJumpTime>0?Math.atan2(player.rocketJumpVY||0,player.rocketJumpVX||1):weaponAng; if(player.dashTime>0||player.rocketJumpTime>0){ for(let i=3;i>=1;i--){ const trailX=x-Math.cos(moveAng)*i*7,trailY=y-Math.sin(moveAng)*i*7; ctx.fillStyle=`rgba(255,190,120,${0.09*i})`; ctx.fillRect(px(trailX-7),px(trailY-7),14,18); } } ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.font='12px Courier New'; ctx.textAlign='center'; ctx.fillText(state.playerName,x+1,y-15); ctx.fillStyle='#f0e6d8'; ctx.fillText(state.playerName,x,y-16); if(player.dashTime>0||player.rocketJumpTime>0){ const spinBase=player.dashTime>0?1-(player.dashTime/0.18):1-(player.rocketJumpTime/ROCKET_JUMP_DURATION); const spin=spinBase*Math.PI*2*player.dashSpinDir; drawStyledSurvivorBody(x,y,baseX,baseY,look,{alive:true,hurt:player.hurtTimer>0,faceDir:player.faceDir,weapon:player.weapon,weaponAng,spinMode:true,spin,jumpVisual}); return; } drawStyledSurvivorBody(x,y,baseX,baseY,look,{alive:true,hurt:player.hurtTimer>0,faceDir:player.faceDir,weapon:player.weapon,weaponAng,jumpVisual}); }
 
   const __origDrawPlayer = drawPlayer;
   drawPlayer = function(cam){
@@ -2172,7 +2208,7 @@
     else if((peer.rocketJumpTime||0)>0) weaponAng = Math.atan2(peer.rocketJumpVY||0,peer.rocketJumpVX||peer.faceDir||1);
     else if((peer.knockbackTime||0)>0) weaponAng = Math.atan2(peer.knockbackVY||0,peer.knockbackVX||peer.faceDir||1);
     else weaponAng = (peer.faceDir||1)<0?Math.PI:worldMouseAngle;
-    if(peer.downed){ drawDownedSurvivorBody(x,y,baseX,baseY,look,faceDir,peer.name,(peer.reviveProgress||0)/5); return; }
+    if(peer.downed){ drawDownedSurvivorBody(x,y,baseX,baseY,look,faceDir,onlineDisplayNameForId(peer.id, peer.name),(peer.reviveProgress||0)/5); return; }
     ctx.fillStyle='rgba(0,0,0,0.65)';
     ctx.font='12px Courier New';
     ctx.textAlign='center';
