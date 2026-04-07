@@ -237,7 +237,7 @@
   }
 
   function onlineCanUseChat(){
-    return !!(online.gameMode === 'online' && online.connected && online.roomId && (state.overlayScreen === 'online-room' || (online.started && state.running && !state.gameOver)));
+    return !!(online.connected && online.roomId && (state.overlayScreen === 'online-room' || (online.started && state.running && !state.gameOver)));
   }
 
   function onlineIsTypingElement(el){
@@ -2554,14 +2554,6 @@
     const cam = camera();
     drawOnlineReviveMarkers(cam);
     drawOnlineScoreboardPanel();
-    ctx.textAlign='left';
-    ctx.font='bold 12px Courier New';
-    ctx.fillStyle='rgba(0,0,0,0.55)';
-    ctx.fillRect(12, SH-64, 220, 48);
-    ctx.fillStyle='#9cc2ff';
-    ctx.fillText(`${ot().onlinePreview}`, 20, SH-42);
-    ctx.fillStyle='#f0e6d8';
-    ctx.fillText(`${ot().peers}: ${Object.keys(online.peers).length}`, 20, SH-24);
     if(online.spectating){
       const target = onlineSpectateTarget();
       const label = target ? `${lang==='zh' ? '正在观战' : 'SPECTATING'}: ${target.name || 'Player'}` : (lang==='zh' ? '你已死亡，等待队友。' : 'You are dead. Waiting on your teammate.');
