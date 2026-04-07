@@ -235,6 +235,35 @@
   function onlinePlayerNameEditorMarkup(){
     return typeof window.playerNameEditorMarkup === 'function' ? window.playerNameEditorMarkup('margin-top:0;margin-bottom:14px;') : '';
   }
+  function onlineHandlePlayerNameSaved(nextName){
+    const cleanName = String(nextName || '').trim();
+    if(!cleanName) return false;
+    if(online.connected){
+      onlineSend({ type:'set_name', name: cleanName });
+    }
+    if(online.roomState && Array.isArray(online.roomState.players)){
+      for(const player of online.roomState.players){
+        if(player && player.id === online.clientId){
+          player.name = cleanName;
+          break;
+        }
+      }
+      if(online.roomState.hostId === online.clientId) online.roomState.hostName = cleanName;
+    }
+    if(online.matchState && online.matchState.playersById && online.clientId && online.matchState.playersById[online.clientId]){
+      online.matchState.playersById[online.clientId].name = cleanName;
+    }
+    if(state.overlayScreen === 'online-room'){
+      renderOnlineRoom();
+      return true;
+    }
+    if(state.overlayScreen === 'online-lobby'){
+      renderOnlineLobby();
+      return true;
+    }
+    return online.connected || online.gameMode === 'online';
+  }
+  window.onDeadTownPlayerNameSaved = onlineHandlePlayerNameSaved;
   function onlineIsMode(){ return online.gameMode === 'online'; }
   function lerpAngle(a, b, t){
     if(!Number.isFinite(a)) return Number.isFinite(b) ? b : 0;

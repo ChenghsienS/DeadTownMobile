@@ -2070,6 +2070,29 @@ wss.on('connection', (ws) => {
         else safeSend(ws, { type: 'queue_status', position: Math.max(1, waitingQueue.findIndex((item) => item && item.id === client.id) + 1 || 1), server: serverStatusPayload({ queued: true }) });
         return;
       }
+      if (msg.type === 'set_name') {
+        const nextName = typeof msg.name === 'string' ? msg.name.trim().slice(0, PLAYER_NAME_MAX_LENGTH) : '';
+        if (!nextName) {
+          safeSend(ws, { type: 'error', message: 'Invalid player name.' });
+          return;
+        }
+        const oldName = client.name;
+        client.name = nextName;
+        if (client.roomId) {
+          const room = rooms.get(client.roomId);
+          if (room) {
+            if (room.hostId === client.id) room.hostName = client.name;
+            if (room.match && room.match.playersById) {
+              const matchPlayer = room.match.playersById.get(client.id);
+              if (matchPlayer) matchPlayer.name = client.name;
+            }
+            broadcastRoomState(room, 'room_update');
+          }
+        }
+        broadcastRoomList();
+        safeSend(ws, { type: 'name_updated', name: client.name, oldName });
+        return;
+      }
       if (!clients.has(client.id)) {
         safeSend(ws, { type: 'queue_status', position: Math.max(1, waitingQueue.findIndex((item) => item && item.id === client.id) + 1 || 1), server: serverStatusPayload({ queued: true }) });
         return;

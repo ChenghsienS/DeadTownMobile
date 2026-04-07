@@ -623,7 +623,7 @@ function savePlayerName(nextName, options={}){
 function playerNameEditorMarkup(extraStyle=''){
   const t = T[lang];
   const safeValue = escapeHtml(state.playerName || 'Player');
-  return `<div style="margin:14px 0 10px;text-align:left;${extraStyle}"><label for="playerNameInput" style="display:block;opacity:0.78;margin-bottom:6px;">${t.nameLabel}</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input id="playerNameInput" maxlength="${PLAYER_NAME_MAX_LENGTH}" value="${safeValue}" placeholder="Player" style="flex:1;min-width:180px;padding:10px 12px;background:#141111;border:1px solid rgba(255,255,255,0.14);color:#f0e6d8;font:inherit;"><button id="saveNameBtn">${t.saveName}</button></div><div style="opacity:0.62;font-size:12px;margin-top:6px;">${t.nameHint}</div></div>`;
+  return `<div style="margin:14px 0 10px;text-align:left;${extraStyle}"><label for="playerNameInput" style="display:block;opacity:0.78;margin-bottom:6px;">${t.nameLabel}</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input id="playerNameInput" maxlength="${PLAYER_NAME_MAX_LENGTH}" value="${safeValue}" placeholder="Player" style="flex:1;min-width:180px;padding:10px 12px;background:#141111;border:1px solid rgba(255,255,255,0.14);color:#f0e6d8;font:inherit;"><button id="saveNameBtn" type="button">${t.saveName}</button></div><div style="opacity:0.62;font-size:12px;margin-top:6px;">${t.nameHint}</div></div>`;
 }
 function focusPlayerNameInput(){
   const input = $('playerNameInput');
@@ -638,13 +638,15 @@ function bindPlayerNameEditor(){
     input.value = sanitizePlayerName(input.value);
     if(savePlayerName(input.value, { skipRerender:true })){
       input.value = state.playerName;
-      if(typeof online !== 'undefined' && online && online.connected){
-        try { onlineSendPlayerState(); } catch(_) {}
+      let handled = false;
+      if(typeof window.onDeadTownPlayerNameSaved === 'function'){
+        try { handled = window.onDeadTownPlayerNameSaved(state.playerName) === true; } catch(_) {}
       }
-      applyLang();
+      if(!handled) applyLang();
     }
   };
-  saveBtn.onclick = commit;
+  saveBtn.type = 'button';
+  saveBtn.onclick = (e)=>{ if(e) e.preventDefault(); commit(); };
   input.onkeydown = (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); commit(); } };
   input.oninput = ()=>{ if(input.value.length > PLAYER_NAME_MAX_LENGTH) input.value = input.value.slice(0, PLAYER_NAME_MAX_LENGTH); };
 }
