@@ -4,6 +4,7 @@
     : '';
   const ONLINE_FALLBACK_WS = 'wss://deadtown-by-cedrrriiiccc.online';
   const ONLINE_DEFAULT_WS = localStorage.getItem('deadtown_online_server_url') || sameOriginWs || ONLINE_FALLBACK_WS;
+  const ONLINE_DOWNED_DEATH_TIME = 30;
   const ONLINE_T = {
     en: {
       onlineBtn: 'Online Co-op',
@@ -73,6 +74,10 @@
       returnToRoom: 'Return to Room',
       mainMenu: 'Main Menu',
       onlineNeedTwoPlayers: 'At least 2 players are required to start a match.',
+      onlineStatusAlive: 'Alive',
+      onlineStatusDowned: 'Downed',
+      onlineStatusDead: 'Dead',
+      onlineStatusTimer: 'Time',
     },
     zh: {
       onlineBtn: '在线合作',
@@ -129,6 +134,10 @@
       onlineStartInfo: '正在进入联机同步对局...',
       onlineMatchEnded: '对局已结束。',
       onlineNeedTwoPlayers: '至少需要 2 名玩家才能开始游戏。',
+      onlineStatusAlive: '存活',
+      onlineStatusDowned: '倒地',
+      onlineStatusDead: '死亡',
+      onlineStatusTimer: '剩余',
       onlineScoreboard: '局内分数',
       onlineTotalScore: '总分',
       onlineSummaryTitle: '对局结算',
@@ -752,6 +761,8 @@
     player.downCount = self.downCount || 0;
     player.reviveProgress = self.reviveProgress || 0;
     player.reviveRadius = self.reviveRadius || 72;
+    player.downedTimer = self.downedTimer ?? player.downedTimer ?? 0;
+    player.downedTimerSyncAt = performance.now();
     player.score = self.score ?? player.score ?? state.score ?? 0;
     player.kills = self.kills ?? player.kills ?? state.kills ?? 0;
     if((self.rocketJumpTime||0) > 0.02 && (player.rocketJumpTime||0) <= 0.02){
@@ -1837,8 +1848,28 @@
   function getOnlineScoreEntries(){
     const entries = [];
     const selfScore = Number.isFinite(state.score) ? state.score : (Number.isFinite(player.score) ? player.score : 0);
-    entries.push({ id: online.clientId || 'self', name: onlineDisplayNameForId(online.clientId || 'self', state.playerName || 'Player'), score: Math.round(selfScore || 0) });
-    for(const peer of Object.values(online.peers || {})) entries.push({ id: peer.id, name: onlineDisplayNameForId(peer.id, peer.name || 'Player'), score: Math.round(peer.score || 0) });
+    entries.push({
+      id: online.clientId || 'self',
+      name: onlineDisplayNameForId(online.clientId || 'self', state.playerName || 'Player'),
+      score: Math.round(selfScore || 0),
+      downed: !!player.downed,
+      dead: !!player.dead,
+      alive: !player.dead && !player.downed,
+      downedTimer: player.downedTimer || 0,
+      downedTimerSyncAt: player.downedTimerSyncAt || online.lastSnapshotAt || performance.now(),
+      reviveProgress: player.reviveProgress || 0,
+    });
+    for(const peer of Object.values(online.peers || {})) entries.push({
+      id: peer.id,
+      name: onlineDisplayNameForId(peer.id, peer.name || 'Player'),
+      score: Math.round(peer.score || 0),
+      downed: !!peer.downed,
+      dead: !!peer.dead,
+      alive: !!peer.alive && !peer.downed && !peer.dead,
+      downedTimer: peer.downedTimer || 0,
+      downedTimerSyncAt: peer.lastSeen || online.lastSnapshotAt || performance.now(),
+      reviveProgress: peer.reviveProgress || 0,
+    });
     entries.sort((a,b)=>{
       const ds = (b.score||0) - (a.score||0);
       if(ds) return ds;
@@ -1852,9 +1883,9 @@
   function getOnlineScoreboardLayout(){
     const mobile = MOBILE_MODE;
     const entries = getOnlineScoreEntries();
-    const mw = mobile ? 136 : 196;
+    const mw = mobile ? 152 : 232;
     const mh = mobile ? 76 : 120;
-    const rowH = mobile ? 16 : 18;
+    const rowH = mobile ? 24 : 30;
     const headerH = mobile ? 24 : 26;
     const totalH = mobile ? 20 : 22;
     const panelH = headerH + entries.length * rowH + totalH + 12;
@@ -2061,6 +2092,36 @@
     ctx.drawImage(onlineLightCanvas, 0, 0);
   };
 
+
+  function onlineRemainingDownedTime(entity){
+    if(!entity || !entity.downed || entity.dead) return 0;
+    const base = Number(entity.downedTimer || 0);
+    const syncAt = Number(entity.downedTimerSyncAt || entity.lastSeen || online.lastSnapshotAt || performance.now());
+    const pausedByRevive = (entity.reviveProgress || 0) > 0;
+    if(pausedByRevive) return Math.max(0, base);
+    const elapsed = Math.max(0, (performance.now() - syncAt) / 1000);
+    return Math.max(0, base - elapsed);
+  }
+
+  function onlinePlayerStatusInfo(entity){
+    const t = ot();
+    if(entity?.dead) return { key:'dead', label:t.onlineStatusDead, ratio:0 };
+    if(entity?.downed){
+      const remaining = onlineRemainingDownedTime(entity);
+      return { key:'downed', label:t.onlineStatusDowned, ratio:Math.max(0, Math.min(1, remaining / ONLINE_DOWNED_DEATH_TIME)), remaining };
+    }
+    return { key:'alive', label:t.onlineStatusAlive, ratio:1 };
+  }
+
+  function drawMinimapSkullIcon(x, y){
+    pxRect(x-3,y-4,6,5,'rgba(245,245,245,0.95)');
+    pxRect(x-2,y+1,4,2,'rgba(245,245,245,0.95)');
+    pxRect(x-2,y+3,1,2,'rgba(245,245,245,0.95)');
+    pxRect(x+1,y+3,1,2,'rgba(245,245,245,0.95)');
+    pxRect(x-2,y-2,1,1,'#0d0d0d');
+    pxRect(x+1,y-2,1,1,'#0d0d0d');
+  }
+
   const __origDrawMinimap = drawMinimap;
   drawMinimap = function(cam){
     if(!(online.connected && online.started && onlineIsMode() && state.running && !state.gameOver)) return __origDrawMinimap(cam);
@@ -2078,14 +2139,46 @@
     for(const z of state.zombies) ctx.fillRect(mx+z.x*sx,my+z.y*sy,z.type==='boss'?(mobile?3:4):2,z.type==='boss'?(mobile?3:4):2);
     ctx.fillStyle='#7fc4ff';
     for(const a of state.airdrops) ctx.fillRect(mx+a.x*sx-2,my+a.y*sy-2,mobile?4:5,mobile?4:5);
-    ctx.fillStyle='#ffd27f';
-    ctx.fillRect(mx+player.x*sx-2,my+player.y*sy-2,mobile?3:4,mobile?3:4);
+
+    const blinkOn = Math.floor(performance.now() / 220) % 2 === 0;
+    const selfX = mx + player.x * sx;
+    const selfY = my + player.y * sy;
+    if(player.dead){
+      drawMinimapSkullIcon(px(selfX), px(selfY));
+    }else if(player.downed){
+      if(blinkOn){
+        ctx.fillStyle='#ffae4d';
+        ctx.fillRect(selfX-3,selfY-3,mobile?5:6,mobile?5:6);
+      }
+    }else{
+      ctx.fillStyle='#ffd27f';
+      ctx.fillRect(selfX-2,selfY-2,mobile?3:4,mobile?3:4);
+    }
+
     for(const peer of Object.values(online.peers || {})){
       const pxv = Number.isFinite(peer.displayX) ? peer.displayX : (peer.x || 0);
       const pyv = Number.isFinite(peer.displayY) ? peer.displayY : (peer.y || 0);
-      ctx.fillStyle='#ffffff';
-      ctx.fillRect(mx+pxv*sx-2,my+pyv*sy-2,mobile?3:4,mobile?3:4);
+      const sxp = mx + pxv * sx;
+      const syp = my + pyv * sy;
+      if(peer.dead) continue;
+      if(peer.downed){
+        if(blinkOn){
+          ctx.fillStyle='#ffffff';
+          ctx.fillRect(sxp-3,syp-3,mobile?5:6,mobile?5:6);
+          ctx.fillStyle='#ff5f5f';
+          ctx.fillRect(sxp-2,syp-2,mobile?3:4,mobile?3:4);
+        }
+      }else{
+        ctx.fillStyle='#ffffff';
+        ctx.fillRect(sxp-2,syp-2,mobile?3:4,mobile?3:4);
+      }
     }
+
+    for(const tomb of (online.tombstones || [])){
+      if(!tomb) continue;
+      drawMinimapSkullIcon(px(mx + (tomb.x || 0) * sx), px(my + (tomb.y || 0) * sy));
+    }
+
     ctx.strokeStyle='rgba(255,255,255,0.4)';
     ctx.strokeRect(mx+cam.x*sx,my+cam.y*sy,SW*sx,SH*sy);
   };
@@ -2104,16 +2197,37 @@
     ctx.fillText(t.onlineScoreboard, mx + 8, panelY + 16);
     const scoreX = mx + mw - 8;
     let rowTop = panelY + headerH;
-    ctx.font = `${MOBILE_MODE ? '11px' : '12px'} Courier New`;
     for(const entry of entries){
       const isSelf = entry.id === (online.clientId || 'self');
-      const textY = rowTop + rowH - 5;
+      const status = onlinePlayerStatusInfo(entry);
       if(isSelf) pxRect(mx + 4, rowTop - 1, mw - 8, rowH, 'rgba(255,210,110,0.10)');
+      const nameY = rowTop + 11;
+      ctx.font = `${MOBILE_MODE ? '11px' : '12px'} Courier New`;
       ctx.fillStyle = isSelf ? '#ffd27f' : '#f0e6d8';
       ctx.textAlign='left';
-      ctx.fillText(String(entry.name || 'Player').slice(0, MOBILE_MODE ? 11 : 15), mx + 8, textY);
+      ctx.fillText(String(entry.name || 'Player').slice(0, MOBILE_MODE ? 12 : 18), mx + 8, nameY);
       ctx.textAlign='right';
-      ctx.fillText(String(Math.round(entry.score || 0)), scoreX, textY);
+      ctx.fillText(String(Math.round(entry.score || 0)), scoreX, nameY);
+      ctx.textAlign='left';
+      if(status.key === 'alive'){
+        ctx.fillStyle = '#63c574';
+        ctx.fillText(status.label, mx + 8, rowTop + rowH - 7);
+      }else if(status.key === 'dead'){
+        ctx.fillStyle = '#d0d0d0';
+        ctx.fillText(status.label, mx + 8, rowTop + rowH - 7);
+      }else{
+        const barX = mx + 8;
+        const barY = rowTop + rowH - 8;
+        const barW = Math.max(38, mw - 88);
+        ctx.fillStyle = '#ff9a6a';
+        ctx.fillText(status.label, barX, rowTop + 20);
+        ctx.fillStyle = '#ffe1d1';
+        ctx.textAlign='right';
+        ctx.fillText(`${Math.ceil(status.remaining || 0)}s`, scoreX, rowTop + 20);
+        ctx.textAlign='left';
+        pxRect(barX, barY, barW, 4, 'rgba(255,255,255,0.10)');
+        pxRect(barX, barY, Math.max(0, Math.round(barW * (status.ratio || 0))), 4, '#ff7b61');
+      }
       rowTop += rowH;
     }
     const dividerY = panelY + panelH - totalH - 4;
@@ -2123,6 +2237,7 @@
     ctx.lineTo(mx + mw - 6, dividerY);
     ctx.stroke();
     const totalY = panelY + panelH - 8;
+    ctx.font = `${MOBILE_MODE ? '11px' : '12px'} Courier New`;
     ctx.fillStyle='#f0d39c';
     ctx.textAlign='left';
     ctx.fillText(t.onlineTotalScore, mx + 8, totalY);
@@ -2148,7 +2263,7 @@
   function drawSurvivorAccessory(x, y, faceDir, look, alive){ const accent = alive ? look.accent : '#666666'; const detail = alive ? look.detail : '#555555'; switch(look.accessory){ case 'hood': pxRect(x-7,y-10,14,3,accent); pxRect(x-7,y-8,2,4,accent); pxRect(x+5,y-8,2,4,accent); break; case 'bandolier': pxRect(x-5,y+3,2,7,accent); pxRect(x-2,y+2,2,7,detail); pxRect(x+1,y+1,2,7,accent); break; case 'cap': pxRect(x-7,y-10,14,3,accent); if(faceDir>0) pxRect(x+4,y-7,4,2,accent); else pxRect(x-8,y-7,4,2,accent); break; case 'shoulder': if(faceDir>0){ pxRect(x+4,y+1,5,4,accent); pxRect(x+4,y+5,4,2,detail); } else { pxRect(x-9,y+1,5,4,accent); pxRect(x-8,y+5,4,2,detail); } break; case 'mask': pxRect(x-4,y-2,8,3,accent); break; case 'poncho': pxRect(x-7,y+1,14,3,accent); pxRect(x-6,y+4,12,2,detail); break; case 'pack': if(faceDir>0) pxRect(x-8,y+2,3,9,accent); else pxRect(x+5,y+2,3,9,accent); break; case 'beanie': pxRect(x-6,y-10,12,3,accent); pxRect(x-2,y-11,4,2,detail); break; }}
   function drawStyledSurvivorBody(x, y, baseX, baseY, look, opts){ const alive = !!opts.alive; const faceDir = (opts.faceDir||1)<0 ? -1 : 1; const weapon = opts.weapon || 'shotgun'; const weaponAng = Number.isFinite(opts.weaponAng) ? opts.weaponAng : (faceDir<0?Math.PI:0); const jumpVisual = opts.jumpVisual || { lift:0, shadowScale:1 }; const bodyColor = alive ? look.coat : '#545454'; const legsColor = alive ? look.legs : '#3c3c3c'; const faceColor = alive ? (opts.hurt ? look.hurt : look.face) : '#9a9a9a'; const hairColor = alive ? look.hair : '#666666'; const ember = alive ? '#ff7a1a' : '#8b8b8b'; const muzzleWood = alive ? look.detail : '#666666'; const gunBody = weapon==='gatling' ? '#545f66' : weapon==='rocket' ? '#5a646f' : weapon==='flamethrower' ? '#7a7a7a' : (look.gunBody || '#7d614f'); const gunTrim = look.gunTrim || '#2c2c2c'; pxRect(baseX-11*(jumpVisual.shadowScale||1),baseY+12,22*(jumpVisual.shadowScale||1),5,'rgba(0,0,0,0.2)'); if(opts.spinMode){ const spin = opts.spin || 0; ctx.save(); ctx.translate(x,y+3); ctx.rotate(spin); pxRect(-7,-6,14,5,hairColor); pxRect(-8,-3,16,7,faceColor); pxRect(6,-1,6,2,muzzleWood); pxRect(11,-1,2,2,ember); pxRect(-8,4,16,8,bodyColor); pxRect(-10,2,3,10,legsColor); pxRect(7,2,3,10,legsColor); if(look.accessory==='bandolier'){ pxRect(-5,4,2,7,alive?look.accent:'#666'); pxRect(-1,3,2,7,alive?look.detail:'#555'); pxRect(3,2,2,7,alive?look.accent:'#666'); } else if(look.accessory==='poncho'){ pxRect(-8,3,16,3,alive?look.accent:'#666'); } else if(look.accessory==='hood'){ pxRect(-8,-6,16,2,alive?look.accent:'#666'); } drawRotatedGun(0,4,spin,gunBody,gunTrim,weapon); ctx.restore(); return; } pxRect(x-6,y-8,12,10,faceColor); pxRect(x-6,y-10,12,3,hairColor); pxRect(x-5,y-6,10,3,'#0a0a0a'); drawSurvivorAccessory(x, y, faceDir, look, alive); if(faceDir>0){ pxRect(x+5,y-3,5,2,muzzleWood); pxRect(x+10,y-3,2,2,ember); } else { pxRect(x-10,y-3,5,2,muzzleWood); pxRect(x-12,y-3,2,2,ember); } pxRect(x-5,y+2,10,9,bodyColor); pxRect(x-7,y+10,4,6,legsColor); pxRect(x+3,y+10,4,6,legsColor); if(alive) drawRotatedGun(x,y+4,weaponAng,gunBody,gunTrim,weapon); }
   function drawDownedSurvivorBody(x,y,baseX,baseY,look,faceDir,name,progress){ pxRect(baseX-10,baseY+12,20,5,'rgba(0,0,0,0.18)'); pxRect(x-11,y+5,18,7,look.coat); pxRect(x-1,y+2,10,5,look.legs); pxRect(x-10,y+1,9,6,look.face); pxRect(x-10,y-1,10,2,look.hair); pxRect(x-12,y+5,3,6,look.detail); ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.font='12px Courier New'; ctx.textAlign='center'; ctx.fillText(String(name||'Player'),x+1,y-15); ctx.fillStyle='#f0d39c'; ctx.fillText(String(name||'Player'),x,y-16); const barW=28; pxRect(x-barW/2,y-28,barW,4,'rgba(255,255,255,0.12)'); pxRect(x-barW/2,y-28,barW*Math.max(0,Math.min(1,progress||0)),4,'#f0d39c'); }
-  function drawTombstoneAt(t, cam){ const s=worldToScreen(t.x||0,t.y||0,cam),x=px(s.x),y=px(s.y); pxRect(x-7,y-16,14,18,'#68625b'); pxRect(x-5,y-14,10,14,'#7b746c'); pxRect(x-2,y+2,4,9,'#4f4943'); pxRect(x-8,y+2,16,2,'rgba(36,32,28,0.25)'); ctx.fillStyle='rgba(0,0,0,0.18)'; ctx.fillRect(x-11,y+10,22,4); }
+  function drawTombstoneAt(t, cam){ const s=worldToScreen(t.x||0,t.y||0,cam),x=px(s.x),y=px(s.y); pxRect(x-8,y-14,16,20,'#5c5751'); pxRect(x-6,y-12,12,16,'#7a736a'); pxRect(x-5,y-11,10,2,'rgba(255,255,255,0.10)'); ctx.fillStyle='rgba(0,0,0,0.18)'; ctx.fillRect(x-10,y+8,20,4); }
   function drawStyledLocalPlayer(cam){ const look = onlineAppearanceFor(online.clientId || state.playerName, player.onlineAppearanceIndex); const s=worldToScreen(player.x,player.y,cam),baseX=px(s.x),baseY=px(s.y); const jumpVisual=getPlayerJumpVisual(),lift=jumpVisual.lift; const x=baseX,y=px(baseY-lift); if(player.dead){ return; } if(player.downed){ drawDownedSurvivorBody(x,y,baseX,baseY,look,player.faceDir,onlineDisplayNameForId(online.clientId || 'self', state.playerName),(player.reviveProgress||0)/5); return; } if(state.deathAnim>0){ const collapse=(1.4-state.deathAnim)/1.4; pxRect(baseX-8,baseY-2+collapse*10,16,4,'#7b1b1b'); pxRect(baseX-4,baseY+2+collapse*10,8,6,look.coat); return; } const worldMouseX=cam.x+state.mouse.x,worldMouseY=cam.y+state.mouse.y; const aimAng=Math.atan2(worldMouseY-player.y,worldMouseX-player.x); const mobileAimActive = MOBILE_MODE && touchState.aim.active && Math.hypot(touchState.aim.dx,touchState.aim.dy)>12; let weaponAng=aimAng; if(MOBILE_MODE && !mobileAimActive){ if(player.dashTime>0) weaponAng=player.dashFacing; else if(player.rocketJumpTime>0) weaponAng=Math.atan2(player.rocketJumpVY||0,player.rocketJumpVX||player.faceDir||1); else if(player.knockbackTime>0) weaponAng=Math.atan2(player.knockbackVY||0,player.knockbackVX||player.faceDir||1); else if(Math.hypot(touchState.move.dx,touchState.move.dy)>6) weaponAng=Math.atan2(touchState.move.dy,touchState.move.dx); else weaponAng=(player.faceDir||1)<0?Math.PI:0; } const moveAng=player.dashTime>0?player.dashFacing:player.rocketJumpTime>0?Math.atan2(player.rocketJumpVY||0,player.rocketJumpVX||1):weaponAng; if(player.dashTime>0||player.rocketJumpTime>0){ for(let i=3;i>=1;i--){ const trailX=x-Math.cos(moveAng)*i*7,trailY=y-Math.sin(moveAng)*i*7; ctx.fillStyle=`rgba(255,190,120,${0.09*i})`; ctx.fillRect(px(trailX-7),px(trailY-7),14,18); } } ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.font='12px Courier New'; ctx.textAlign='center'; ctx.fillText(state.playerName,x+1,y-15); ctx.fillStyle='#f0e6d8'; ctx.fillText(state.playerName,x,y-16); if(player.dashTime>0||player.rocketJumpTime>0){ const spinBase=player.dashTime>0?1-(player.dashTime/0.18):1-(player.rocketJumpTime/ROCKET_JUMP_DURATION); const spin=spinBase*Math.PI*2*player.dashSpinDir; drawStyledSurvivorBody(x,y,baseX,baseY,look,{alive:true,hurt:player.hurtTimer>0,faceDir:player.faceDir,weapon:player.weapon,weaponAng,spinMode:true,spin,jumpVisual}); return; } drawStyledSurvivorBody(x,y,baseX,baseY,look,{alive:true,hurt:player.hurtTimer>0,faceDir:player.faceDir,weapon:player.weapon,weaponAng,jumpVisual}); }
 
   const __origDrawPlayer = drawPlayer;

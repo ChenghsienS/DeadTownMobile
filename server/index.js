@@ -1074,10 +1074,13 @@ function updatePlayerTransientStates(room, dt) {
   }
   const standing = livingPlayers(room);
   for (const player of downedPlayers(room)) {
-    player.downedTimer = Math.max(0, (player.downedTimer || DOWNED_DEATH_TIME) - dt);
     const revivers = standing.filter((other) => other.id !== player.id && dist(other.x, other.y, player.x, player.y) <= REVIVE_RADIUS);
-    if (revivers.length > 0) player.reviveProgress = Math.min(REVIVE_TIME, (player.reviveProgress || 0) + dt);
-    else player.reviveProgress = 0;
+    if (revivers.length > 0) {
+      player.reviveProgress = Math.min(REVIVE_TIME, (player.reviveProgress || 0) + dt);
+    } else {
+      player.reviveProgress = 0;
+      player.downedTimer = Math.max(0, (player.downedTimer || DOWNED_DEATH_TIME) - dt);
+    }
     if ((player.reviveProgress || 0) >= REVIVE_TIME) {
       revivePlayer(room, player);
       const clientRef = clients.get(player.id);
