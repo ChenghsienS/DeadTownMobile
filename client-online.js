@@ -1481,7 +1481,7 @@
     }else if(player.dashTime>0){
       moveWithWallCollision(player,player.dashVX*dt,player.dashVY*dt);
     }else{
-      const moveSpeed = downedLocal ? 30 : player.speed*(player.speedMul||1);
+      const moveSpeed = downedLocal ? 60 : player.speed*(player.speedMul||1);
       moveWithWallCollision(player,mx*moveSpeed*dt,my*moveSpeed*dt);
     }
 
@@ -1865,7 +1865,7 @@
     for(const peer of Object.values(online.peers || {})){
       const pxv = Number.isFinite(peer.displayX) ? peer.displayX : (peer.x || 0);
       const pyv = Number.isFinite(peer.displayY) ? peer.displayY : (peer.y || 0);
-      ctx.fillStyle='#f4f4f4';
+      ctx.fillStyle='#ffffff';
       ctx.fillRect(mx+pxv*sx-2,my+pyv*sy-2,mobile?3:4,mobile?3:4);
     }
     ctx.strokeStyle='rgba(255,255,255,0.4)';
