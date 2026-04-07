@@ -72,6 +72,7 @@
       onlineSummaryMatchTime: 'Match Time',
       returnToRoom: 'Return to Room',
       mainMenu: 'Main Menu',
+      onlineNeedTwoPlayers: 'At least 2 players are required to start a match.',
     },
     zh: {
       onlineBtn: '在线合作',
@@ -127,6 +128,7 @@
       onlineReconnectIn: '将在此时间后重连',
       onlineStartInfo: '正在进入联机同步对局...',
       onlineMatchEnded: '对局已结束。',
+      onlineNeedTwoPlayers: '至少需要 2 名玩家才能开始游戏。',
       onlineScoreboard: '局内分数',
       onlineTotalScore: '总分',
       onlineSummaryTitle: '对局结算',
@@ -1029,7 +1031,13 @@
   function joinOnlineRoom(id){ onlineSend({ type:'join_room', roomId:id }); }
   function leaveOnlineRoom(){ onlineSend({ type:'leave_room' }); }
   function toggleOnlineReady(){ onlineSend({ type:'toggle_ready' }); }
-  function startOnlineMatch(){ onlineSend({ type:'start_match' }); }
+  function startOnlineMatch(){
+    if(online.roomState && (online.roomState.players?.length || 0) < 2){
+      pushOnlineNotice(ot().onlineNeedTwoPlayers, 'warn');
+      return;
+    }
+    onlineSend({ type:'start_match' });
+  }
   function refreshOnlineRooms(){ onlineSend({ type:'list_rooms' }); }
 
   function renderOnlineLobby(){
@@ -1096,6 +1104,7 @@
     const me = (room.players||[]).find(p=>p.id===online.clientId) || null;
     const meReady = !!me?.ready;
     const isHost = online.clientId === room.hostId;
+    const canStartWithCurrentPlayers = (room.players?.length || 0) >= 2;
     const countdownLeft = room.countdownEndsAt ? Math.max(0, Math.ceil((room.countdownEndsAt - Date.now())/1000)) : 0;
     const playersMarkup = (room.players||[]).map(p=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-top:1px solid rgba(255,255,255,0.08);"><span>${escapeHtml(p.name)} ${p.id===room.hostId?`<span class="accent">(${t.host})</span>`:''}</span><span style="opacity:0.72;">${room.started?t.inGame:(p.ready?t.readyStatus:t.unreadyStatus)}</span></div>`).join('');
     $('overlayCard').className='card';
@@ -1108,8 +1117,9 @@
       <div class="controls" style="justify-content:center;flex-wrap:wrap;">
         <button id="onlineLeaveBtn">${t.leave}</button>
         <button id="onlineReadyBtn" ${room.started?'disabled':''}>${meReady?t.unready:t.ready}</button>
-        ${isHost?`<button id="onlineStartBtn" ${room.started?'disabled':''}>${t.startMatch}</button>`:''}
+        ${isHost?`<button id="onlineStartBtn" ${(room.started || !canStartWithCurrentPlayers)?'disabled':''}>${t.startMatch}</button>`:''}
       </div>
+      ${isHost && !room.started && !canStartWithCurrentPlayers ? `<p class="accent" style="margin-top:12px;opacity:0.9;">${t.onlineNeedTwoPlayers}</p>` : ''}
     `;
     $('overlay').classList.remove('hidden');
     setTimeout(()=>{

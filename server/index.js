@@ -754,7 +754,7 @@ function maybeStartCountdown(room) {
 function canStartMatch(room, requesterId) {
   if (room.started) return false;
   if (room.hostId !== requesterId) return false;
-  if (room.players.size < 1) return false;
+  if (room.players.size < 2) return false;
   return true;
 }
 function currentPlayers(room) {
@@ -2119,7 +2119,12 @@ wss.on('connection', (ws) => {
       if (msg.type === 'start_match') {
         const room = rooms.get(client.roomId);
         if (!room) return;
-        if (!canStartMatch(room, client.id)) {
+        if (room.started) return;
+        if (room.players.size < 2) {
+          safeSend(ws, { type: 'error', message: 'At least 2 players are required to start a match.' });
+          return;
+        }
+        if (room.hostId !== client.id) {
           safeSend(ws, { type: 'error', message: 'Only the host can start when everyone is ready.' });
           return;
         }
