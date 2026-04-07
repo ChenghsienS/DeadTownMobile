@@ -5,7 +5,10 @@ const WebSocket = require('ws');
 
 const PORT = Number(process.env.PORT || 8080);
 const TICK_RATE = 60;
-const SNAPSHOT_RATE = 60;
+const SNAPSHOT_RATE = 20;
+const SNAPSHOT_BUFFER_LIMIT = 256 * 1024;
+const SNAPSHOT_PROJECTILE_CAP = 140;
+const SNAPSHOT_VISUAL_FX_CAP = 48;
 const ROOM_MAX_PLAYERS = 6;
 const ROOM_APPEARANCE_COUNT = 8;
 const REVIVE_RADIUS = 72;
@@ -101,13 +104,21 @@ function logServerError(context, err, meta = {}) {
   console.error(`[DeadTownServer] ${context}${suffix}`, err && err.stack ? err.stack : err);
 }
 function safeSend(ws, payload) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+  if (payload && payload.type === 'snapshot' && Number(ws.bufferedAmount || 0) > SNAPSHOT_BUFFER_LIMIT) return false;
   try {
     ws.send(JSON.stringify(payload));
+    return true;
   } catch (err) {
     logServerError('safeSend failed', err);
     try { ws.close(); } catch (_err) {}
+    return false;
   }
+}
+function limitRecent(list, cap) {
+  if (!Array.isArray(list) || cap <= 0) return [];
+  if (list.length <= cap) return list.map((item) => ({ ...item }));
+  return list.slice(list.length - cap).map((item) => ({ ...item }));
 }
 function getServerLoadStatus() {
   if (clients.size >= MAX_ACTIVE_CLIENTS) return 'full';
@@ -1970,14 +1981,11 @@ function snapshotForClient(room, client) {
       pickups: room.match.pickups.map((p) => ({ ...p })),
       airdrops: room.match.airdrops.map((a) => ({ ...a })),
       fireZones: room.match.fireZones.map((f) => ({ ...f })),
-      effects: room.match.effects.map((e) => ({ ...e })),
-      pendingExplosions: room.match.pendingExplosions.map((e) => ({ ...e })),
-      projectiles: room.match.projectiles.map((p) => ({ ...p })),
-      shotFx: room.match.shotFx.map((fx) => ({ ...fx })),
-      flameFx: room.match.flameFx.map((fx) => ({ ...fx })),
-      damageTexts: room.match.damageTexts.map((t) => ({ ...t })),
-      bloodFx: room.match.bloodFx.map((fx) => ({ ...fx })),
-      soundFx: room.match.soundFx.map((fx) => ({ ...fx })),
+      effects: limitRecent(room.match.effects, SNAPSHOT_VISUAL_FX_CAP),
+      projectiles: limitRecent(room.match.projectiles, SNAPSHOT_PROJECTILE_CAP),
+      shotFx: limitRecent(room.match.shotFx, SNAPSHOT_VISUAL_FX_CAP),
+      flameFx: limitRecent(room.match.flameFx, SNAPSHOT_VISUAL_FX_CAP),
+      tombstones: room.match.tombstones.map((t) => ({ ...t })),
     },
   };
 }
