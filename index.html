@@ -578,8 +578,8 @@ function updateOrientationNotice(){ $('rotateNotice')?.classList.toggle('active'
 function updatePauseButton(){ const btn=$('pauseTopBtn'); document.body.classList.toggle('ingame', !!state.running && !state.gameOver); if(!btn) return; const shouldShow=MOBILE_MODE && !state.loading && state.running && !state.gameOver; btn.classList.toggle('hidden', !shouldShow); btn.textContent=lang==='zh' ? (state.paused ? '继续' : '暂停') : (state.paused ? 'RESUME' : 'PAUSE'); }
 
 const T={
-  en:{kills:'Kills',score:'Score',hp:'HP',ammo:'Ammo',weapon:'Weapon',reserve:'Reserve',grenades:'Throwables',time:'Time',wave:'Wave',best:'Best',shotgun:'Shotgun',gatling:'Gatling',rocket:'Rocket Launcher',flamethrower:'Flamethrower',reload:'Reloading',title:'DEAD TOWN',desc:'',tip:'',start1:'A dead town has been overrun by endless infected. You are one of the last survivors still fighting.',start2:'This is a zombie horde PvE survival game focused on fast combat, crowd clearing, and weapon drops. Co-op may come in a future version.',start3:'Click Start to begin',startBtn:'Start',returnMenu:'Return to main menu',dead:'YOU DIED',survive:'Survived',restart:'Restart',mainMenu:'Main Menu',boss:'Boss has spawned!',airdrop:'Airdrop incoming!',bossHp:'Boss HP',paused:'PAUSED',pauseHint:'Press P or Esc to resume',pauseLabel:'P / Esc Pause',loading:'Initializing signal...',loadingReady:'Signal locked. Opening menu...',serumDamage:'Serum acquired: +10% Damage',serumSpeed:'Serum acquired: +5% Speed',serumHealth:'Serum acquired: +15 Max HP',changeGrenadeKey:'Grenade Key',changeMolotovKey:'Molotov Key',openKeybindMenu:'Control',backBtn:'Back',keybindTitle:'Keybinds',keybindHint:'Only A-Z and 0-9 are allowed. Current: Grenade {grenade} · Molotov {molotov}',keyPromptGrenade:'Set grenade key (A-Z or 0-9):',keyPromptMolotov:'Set molotov key (A-Z or 0-9):',keyInvalid:'Only a single A-Z or 0-9 key is allowed.',keyConflict:'That key is already used by the other throwable. Choose a different key.',openKeybindMenu:'Key Settings',backBtn:'Back',devUnlock:'Developer',devUnlockPrompt:'Enter developer password:',devUnlockFail:'Wrong password.',devUnlocked:'Developer mode enabled.',devPanel:'DEV PANEL',devShotgun:'Shotgun',devGatling:'Gatling',devRocket:'Rocket',devFlame:'Flamethrower',devHeal:'Heal',devThrowables:'Throwables',devCharger:'Charger',devBoss:'Boss',devBloater:'Bloater',mobileFullscreenTip:'For a fullscreen-like mobile view, add this webpage to your phone Home Screen first.',mobileRoll:'ROLL',mobileGrenade:'GRENADE',mobileFire:'FIRE',createdBy:'Created by',assistedBy:'This game was created with the assistance of',nameLabel:'Name',leaderboardTitle:'Global Top 10',leaderboardLoading:'Loading leaderboard...',leaderboardEmpty:'No scores yet.',leaderboardError:'Leaderboard unavailable right now.',leaderboardRefresh:'Refresh',leaderboardSyncing:'Syncing score...',youTag:'YOU',chooseDevice:'Choose your device before starting.',devicePc:'PC',deviceMobile:'Mobile',rotateTitle:'Rotate Device',rotateDesc:'This mobile mode is designed for landscape play. Rotate your phone horizontally to continue.',devBoss:'Boss',defaultNameTitle:'Name Required for Leaderboard',defaultNameNotice:'You are still using the default name Player. Scores from this session will not be recorded to the online leaderboard.',defaultNameContinue:'Continue Without Ranking',defaultNameBack:'Back to Main Menu',defaultNameRename:'Change Name',saveName:'Save Name',nameHint:'Up to 25 characters.'},
-  zh:{kills:'击杀',score:'分数',hp:'生命',ammo:'子弹',weapon:'武器',reserve:'备弹',grenades:'投掷物',time:'时间',wave:'波次',best:'最高分',shotgun:'霰弹枪',gatling:'加特林',rocket:'火箭发射器',flamethrower:'喷火器',reload:'换弹中',title:'DEAD TOWN',desc:'',tip:'',start1:'一座死城已被无尽感染者吞没，而你是仍在战斗的幸存者之一。',start2:'这是一款以高速战斗、割草清怪和武器空投为核心的丧尸题材 PVE 生存游戏，未来也许会加入多人合作模式。',start3:'点击开始按钮进入游戏',startBtn:'开始游戏',returnMenu:'返回主菜单',dead:'你死了',survive:'存活',restart:'重新开始',mainMenu:'主菜单',boss:'Boss 已出现！',airdrop:'空投已抵达！',bossHp:'Boss生命',paused:'已暂停',pauseHint:'按 P 或 Esc 继续',pauseLabel:'P / Esc 暂停',loading:'正在初始化信号...',loadingReady:'信号稳定，正在打开菜单...',serumDamage:'已获得血清：伤害 +10%',serumSpeed:'已获得血清：移速 +5%',serumHealth:'已获得血清：生命上限 +15',changeGrenadeKey:'手榴弹键位',changeMolotovKey:'燃烧瓶键位',openKeybindMenu:'Control',backBtn:'返回',keybindTitle:'键位设置',keybindHint:'只能使用 A-Z 和 0-9。当前：手榴弹 {grenade} · 燃烧瓶 {molotov}',keyPromptGrenade:'设置手榴弹键位（A-Z 或 0-9）：',keyPromptMolotov:'设置燃烧瓶键位（A-Z 或 0-9）：',keyInvalid:'只能输入单个 A-Z 或 0-9 键位。',keyConflict:'这个键位已经被另一个投掷物占用了，请换一个。',openKeybindMenu:'键位设置',backBtn:'返回',devUnlock:'开发者',devUnlockPrompt:'输入开发者密码：',devUnlockFail:'密码错误。',devUnlocked:'开发者模式已开启。',devPanel:'开发者面板',devShotgun:'霰弹枪',devGatling:'加特林',devRocket:'火箭筒',devFlame:'喷火器',devHeal:'回血',devThrowables:'投掷物',devCharger:'冲锋怪',devBoss:'Boss',mobileFullscreenTip:'如果想获得接近全屏的手机显示效果，请先将这个网页添加到手机主屏幕，然后再从主屏幕启动游戏。',mobileRoll:'翻滚',mobileGrenade:'手雷',mobileFire:'燃烧瓶',createdBy:'作者',assistedBy:'本游戏在 ChatGPT 的协助下完成',nameLabel:'名字',leaderboardTitle:'全球前十排行榜',leaderboardLoading:'排行榜加载中...',leaderboardEmpty:'暂时还没有成绩。',leaderboardError:'排行榜暂时不可用。',leaderboardRefresh:'刷新',leaderboardSyncing:'正在同步成绩...',youTag:'当前',chooseDevice:'请选择你的设备后再开始。',devicePc:'电脑',deviceMobile:'手机',rotateTitle:'旋转设备',rotateDesc:'手机模式建议横屏游玩。请将手机横过来继续。',devBoss:'首领',defaultNameTitle:'需要先修改名字',defaultNameNotice:'你当前仍在使用默认名字 Player。本局成绩不会记录到后端排行榜。',defaultNameContinue:'继续游玩但不计排行',defaultNameBack:'返回主页面',defaultNameRename:'修改名字',saveName:'保存名字',nameHint:'最多 25 个字符。'}
+  en:{kills:'Kills',score:'Score',hp:'HP',ammo:'Ammo',weapon:'Weapon',reserve:'Reserve',grenades:'Throwables',time:'Time',wave:'Wave',best:'Best',shotgun:'Shotgun',gatling:'Gatling',rocket:'Rocket Launcher',flamethrower:'Flamethrower',reload:'Reloading',title:'DEAD TOWN',desc:'',tip:'',start1:'A dead town has been overrun by endless infected. You are one of the last survivors still fighting.',start2:'This is a zombie horde PvE survival game focused on fast combat, crowd clearing, and weapon drops. Co-op may come in a future version.',start3:'Click Start to begin',startBtn:'Start',returnMenu:'Return to main menu',dead:'YOU DIED',survive:'Survived',restart:'Restart',mainMenu:'Main Menu',boss:'Boss has spawned!',airdrop:'Airdrop incoming!',bossHp:'Boss HP',paused:'PAUSED',pauseHint:'Press P or Esc to resume',pauseLabel:'P / Esc Pause',loading:'Initializing signal...',loadingReady:'Signal locked. Opening menu...',serumDamage:'Serum acquired: +10% Damage',serumSpeed:'Serum acquired: +5% Speed',serumHealth:'Serum acquired: +15 Max HP',changeGrenadeKey:'Grenade Key',changeMolotovKey:'Molotov Key',openKeybindMenu:'Control',backBtn:'Back',keybindTitle:'Keybinds',keybindHint:'Only A-Z and 0-9 are allowed. Current: Grenade {grenade} · Molotov {molotov}',keyPromptGrenade:'Set grenade key (A-Z or 0-9):',keyPromptMolotov:'Set molotov key (A-Z or 0-9):',keyInvalid:'Only a single A-Z or 0-9 key is allowed.',keyConflict:'That key is already used by the other throwable. Choose a different key.',openKeybindMenu:'Key Settings',backBtn:'Back',devUnlock:'Developer',devUnlockPrompt:'Enter developer password:',devUnlockFail:'Wrong password.',devUnlocked:'Developer mode enabled.',devPanel:'DEV PANEL',devShotgun:'Shotgun',devGatling:'Gatling',devRocket:'Rocket',devFlame:'Flamethrower',devHeal:'Heal',devThrowables:'Throwables',devCharger:'Charger',devBoss:'Boss',devBloater:'Bloater',mobileFullscreenTip:'For a fullscreen-like mobile view, add this webpage to your phone Home Screen first.',mobileRoll:'ROLL',mobileGrenade:'GRENADE',mobileFire:'FIRE',createdBy:'Created by',assistedBy:'This game was created with the assistance of',nameLabel:'Name',leaderboardTitle:'Global Top 10',leaderboardLoading:'Loading leaderboard...',leaderboardEmpty:'No scores yet.',leaderboardError:'Leaderboard unavailable right now.',leaderboardRefresh:'Refresh',leaderboardSyncing:'Syncing score...',youTag:'YOU',chooseDevice:'Choose your device before starting.',devicePc:'PC',deviceMobile:'Mobile',rotateTitle:'Rotate Device',rotateDesc:'This mobile mode is designed for landscape play. Rotate your phone horizontally to continue.',devBoss:'Boss',defaultNameTitle:'Name Required for Leaderboard',defaultNameNotice:'You are still using the default name Player. Scores from this session will not be recorded to the online leaderboard.',defaultNameContinue:'Continue Without Ranking',defaultNameBack:'Back to Main Menu',defaultNameRename:'Change Name',saveName:'Save Name',nameHint:'Up to 25 characters.',leaderboardSingleTab:'Single',leaderboardCoopTab:'Co-op',leaderboardCoopPlayers:'Players',leaderboardCoopScore:'Team Score'},
+  zh:{kills:'击杀',score:'分数',hp:'生命',ammo:'子弹',weapon:'武器',reserve:'备弹',grenades:'投掷物',time:'时间',wave:'波次',best:'最高分',shotgun:'霰弹枪',gatling:'加特林',rocket:'火箭发射器',flamethrower:'喷火器',reload:'换弹中',title:'DEAD TOWN',desc:'',tip:'',start1:'一座死城已被无尽感染者吞没，而你是仍在战斗的幸存者之一。',start2:'这是一款以高速战斗、割草清怪和武器空投为核心的丧尸题材 PVE 生存游戏，未来也许会加入多人合作模式。',start3:'点击开始按钮进入游戏',startBtn:'开始游戏',returnMenu:'返回主菜单',dead:'你死了',survive:'存活',restart:'重新开始',mainMenu:'主菜单',boss:'Boss 已出现！',airdrop:'空投已抵达！',bossHp:'Boss生命',paused:'已暂停',pauseHint:'按 P 或 Esc 继续',pauseLabel:'P / Esc 暂停',loading:'正在初始化信号...',loadingReady:'信号稳定，正在打开菜单...',serumDamage:'已获得血清：伤害 +10%',serumSpeed:'已获得血清：移速 +5%',serumHealth:'已获得血清：生命上限 +15',changeGrenadeKey:'手榴弹键位',changeMolotovKey:'燃烧瓶键位',openKeybindMenu:'Control',backBtn:'返回',keybindTitle:'键位设置',keybindHint:'只能使用 A-Z 和 0-9。当前：手榴弹 {grenade} · 燃烧瓶 {molotov}',keyPromptGrenade:'设置手榴弹键位（A-Z 或 0-9）：',keyPromptMolotov:'设置燃烧瓶键位（A-Z 或 0-9）：',keyInvalid:'只能输入单个 A-Z 或 0-9 键位。',keyConflict:'这个键位已经被另一个投掷物占用了，请换一个。',openKeybindMenu:'键位设置',backBtn:'返回',devUnlock:'开发者',devUnlockPrompt:'输入开发者密码：',devUnlockFail:'密码错误。',devUnlocked:'开发者模式已开启。',devPanel:'开发者面板',devShotgun:'霰弹枪',devGatling:'加特林',devRocket:'火箭筒',devFlame:'喷火器',devHeal:'回血',devThrowables:'投掷物',devCharger:'冲锋怪',devBoss:'Boss',mobileFullscreenTip:'如果想获得接近全屏的手机显示效果，请先将这个网页添加到手机主屏幕，然后再从主屏幕启动游戏。',mobileRoll:'翻滚',mobileGrenade:'手雷',mobileFire:'燃烧瓶',createdBy:'作者',assistedBy:'本游戏在 ChatGPT 的协助下完成',nameLabel:'名字',leaderboardTitle:'全球前十排行榜',leaderboardLoading:'排行榜加载中...',leaderboardEmpty:'暂时还没有成绩。',leaderboardError:'排行榜暂时不可用。',leaderboardRefresh:'刷新',leaderboardSyncing:'正在同步成绩...',youTag:'当前',chooseDevice:'请选择你的设备后再开始。',devicePc:'电脑',deviceMobile:'手机',rotateTitle:'旋转设备',rotateDesc:'手机模式建议横屏游玩。请将手机横过来继续。',devBoss:'首领',defaultNameTitle:'需要先修改名字',defaultNameNotice:'你当前仍在使用默认名字 Player。本局成绩不会记录到后端排行榜。',defaultNameContinue:'继续游玩但不计排行',defaultNameBack:'返回主页面',defaultNameRename:'修改名字',saveName:'保存名字',nameHint:'最多 25 个字符。',leaderboardSingleTab:'单人',leaderboardCoopTab:'多人',leaderboardCoopPlayers:'玩家',leaderboardCoopScore:'队伍总分'}
 };
 let lang='en';
 const $=id=>document.getElementById(id);
@@ -659,30 +659,89 @@ window.PLAYER_NAME_MAX_LENGTH = PLAYER_NAME_MAX_LENGTH;
 const SUPABASE_URL='https://yluretxiufiiwyggpuvo.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_LU-09j2m_Qa6c07nCuGyBQ_XWbcCBE6';
 const LEADERBOARD_LIMIT=10;
-function escapeHtml(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+const LEADERBOARD_MODE_SINGLE='single';
+const LEADERBOARD_MODE_COOP='coop';
+function escapeHtml(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');}
+function leaderboardCrownMarkup(index){
+  if(index===0) return `<span style="display:inline-block;min-width:18px;color:#f4c542;">♛</span>`;
+  if(index===1) return `<span style="display:inline-block;min-width:18px;color:#c8d0dc;">♛</span>`;
+  if(index===2) return `<span style="display:inline-block;min-width:18px;color:#c78b4f;">♛</span>`;
+  return `<span style="display:inline-block;min-width:18px;opacity:0.66;">•</span>`;
+}
+function sanitizeCoopPlayerNames(list){
+  if(!Array.isArray(list)) return [];
+  const seen = new Set();
+  const out = [];
+  for(const raw of list){
+    const clean = sanitizePlayerName(raw || 'Player') || 'Player';
+    const key = clean.toLowerCase();
+    if(seen.has(key)) continue;
+    seen.add(key);
+    out.push(clean.slice(0,25));
+    if(out.length>=6) break;
+  }
+  return out;
+}
+function currentLeaderboardRows(){ return state.leaderboardMode===LEADERBOARD_MODE_COOP ? state.leaderboardCoop : state.leaderboardSingle; }
+function currentLeaderboardLoaded(){ return state.leaderboardMode===LEADERBOARD_MODE_COOP ? state.leaderboardCoopLoaded : state.leaderboardSingleLoaded; }
+function currentLeaderboardError(){ return state.leaderboardMode===LEADERBOARD_MODE_COOP ? state.leaderboardCoopError : state.leaderboardSingleError; }
+function currentLeaderboardLoading(){ return state.leaderboardMode===LEADERBOARD_MODE_COOP ? state.leaderboardCoopLoading : state.leaderboardSingleLoading; }
+function setLeaderboardMode(mode){
+  const next = mode===LEADERBOARD_MODE_COOP ? LEADERBOARD_MODE_COOP : LEADERBOARD_MODE_SINGLE;
+  if(state.leaderboardMode===next){
+    if(!currentLeaderboardLoaded() && !currentLeaderboardLoading()) loadLeaderboard(false, next);
+    refreshLeaderboardPanels();
+    return;
+  }
+  state.leaderboardMode = next;
+  refreshLeaderboardPanels();
+  if(!currentLeaderboardLoaded() && !currentLeaderboardLoading()) loadLeaderboard(false, next);
+}
+function formatCoopPlayerNames(names){
+  return sanitizeCoopPlayerNames(names).map(n=>escapeHtml(n)).join(' · ');
+}
 function leaderboardCardMarkup(){
   const t=T[lang];
+  const rows = currentLeaderboardRows();
+  const loading = currentLeaderboardLoading();
+  const loaded = currentLeaderboardLoaded();
+  const errorText = currentLeaderboardError();
+  const isCoop = state.leaderboardMode===LEADERBOARD_MODE_COOP;
+  const title = t.leaderboardTitle;
+  const tabBtn = (mode,label)=>`<button data-leaderboard-tab="${mode}" style="padding:5px 10px;border:1px solid rgba(255,255,255,0.18);background:${state.leaderboardMode===mode?'rgba(255,178,122,0.18)':'rgba(255,255,255,0.04)'};color:${state.leaderboardMode===mode?'#ffd4ae':'#e8e0dc'};font-weight:${state.leaderboardMode===mode?'bold':'normal'};">${label}</button>`;
   let body='';
-  if(state.leaderboardLoading && !state.leaderboardLoaded) body=`<p style="opacity:0.76;margin:10px 0 0;">${t.leaderboardLoading}</p>`;
-  else if(state.leaderboardError && !state.leaderboard.length) body=`<p style="opacity:0.76;margin:10px 0 0;">${t.leaderboardError}</p>`;
-  else if(!state.leaderboard.length) body=`<p style="opacity:0.76;margin:10px 0 0;">${t.leaderboardEmpty}</p>`;
+  if(loading && !loaded) body=`<p style="opacity:0.76;margin:10px 0 0;">${t.leaderboardLoading}</p>`;
+  else if(errorText && !rows.length) body=`<p style="opacity:0.76;margin:10px 0 0;">${errorText}</p>`;
+  else if(!rows.length) body=`<p style="opacity:0.76;margin:10px 0 0;">${t.leaderboardEmpty}</p>`;
   else {
     body='<div style="margin-top:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.03);">';
-    state.leaderboard.forEach((row,index)=>{
-      const active = row.player_name===state.playerName;
-      const nameLabel = `${escapeHtml(row.player_name||'Player')}${active ? `<span class="accent" style="margin-left:8px;font-size:12px;letter-spacing:0.8px;">${t.youTag}</span>` : ''}`;
-      body += `<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 10px;border-top:${index===0?'0':'1px solid rgba(255,255,255,0.08)'};background:${active?'rgba(255,178,122,0.16)':'transparent'};box-shadow:${active?'inset 0 0 0 1px rgba(255,178,122,0.35)':'none'};"><span><span class="accent" style="display:inline-block;min-width:28px;font-weight:${active?'bold':'normal'};">#${index+1}</span> ${nameLabel}</span><span class="accent" style="font-weight:${active?'bold':'normal'};">${Math.floor(Number(row.best_score)||0)}</span></div>`;
+    rows.forEach((row,index)=>{
+      const crown = leaderboardCrownMarkup(index);
+      if(isCoop){
+        const names = sanitizeCoopPlayerNames(row.player_names);
+        const active = names.some(name=>name===state.playerName);
+        const nameLabel = `${formatCoopPlayerNames(names)}${active ? `<span class="accent" style="margin-left:8px;font-size:12px;letter-spacing:0.8px;">${t.youTag}</span>` : ''}`;
+        body += `<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 10px;border-top:${index===0?'0':'1px solid rgba(255,255,255,0.08)'};background:${active?'rgba(255,178,122,0.16)':'transparent'};box-shadow:${active?'inset 0 0 0 1px rgba(255,178,122,0.35)':'none'};"><div style="min-width:0;flex:1;"><div><span class="accent" style="display:inline-flex;align-items:center;gap:4px;min-width:42px;font-weight:${active?'bold':'normal'};">${crown}<span>#${index+1}</span></span></div><div style="margin-top:4px;opacity:0.94;word-break:break-word;">${nameLabel}</div></div><div class="accent" style="font-weight:${active?'bold':'normal'};white-space:nowrap;align-self:center;">${Math.floor(Number(row.team_score)||0)}</div></div>`;
+      }else{
+        const active = row.player_name===state.playerName;
+        const nameLabel = `${escapeHtml(row.player_name||'Player')}${active ? `<span class="accent" style="margin-left:8px;font-size:12px;letter-spacing:0.8px;">${t.youTag}</span>` : ''}`;
+        body += `<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 10px;border-top:${index===0?'0':'1px solid rgba(255,255,255,0.08)'};background:${active?'rgba(255,178,122,0.16)':'transparent'};box-shadow:${active?'inset 0 0 0 1px rgba(255,178,122,0.35)':'none'};"><span><span class="accent" style="display:inline-flex;align-items:center;gap:4px;min-width:42px;font-weight:${active?'bold':'normal'};">${crown}<span>#${index+1}</span></span> ${nameLabel}</span><span class="accent" style="font-weight:${active?'bold':'normal'};">${Math.floor(Number(row.best_score)||0)}</span></div>`;
+      }
     });
     body += '</div>';
   }
   const syncing = state.leaderboardSyncing ? `<p style="opacity:0.64;margin:8px 0 0;">${t.leaderboardSyncing}</p>` : '';
-  const error = state.leaderboardError && state.leaderboard.length ? `<p style="opacity:0.64;margin:8px 0 0;">${escapeHtml(state.leaderboardError)}</p>` : '';
-  const refreshLabel = state.leaderboardLoading ? (lang==='zh' ? '刷新中...' : 'Refreshing...') : t.leaderboardRefresh;
-  const refreshDisabled = state.leaderboardLoading ? 'disabled aria-busy="true"' : '';
-  const refreshStyle = `padding:6px 10px;${state.leaderboardLoading?'opacity:0.58;cursor:default;':''}`;
-  return `<div id="leaderboardPanelInner" style="margin-top:16px;text-align:left;"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;"><div style="font-size:18px;font-weight:bold;">${t.leaderboardTitle}</div><button id="refreshLeaderboardBtn" ${refreshDisabled} style="${refreshStyle}">${refreshLabel}</button></div>${body}${syncing}${error}</div>`;
+  const error = errorText && rows.length ? `<p style="opacity:0.64;margin:8px 0 0;">${escapeHtml(errorText)}</p>` : '';
+  const refreshLabel = loading ? (lang==='zh' ? '刷新中...' : 'Refreshing...') : t.leaderboardRefresh;
+  const refreshDisabled = loading ? 'disabled aria-busy="true"' : '';
+  const refreshStyle = `padding:6px 10px;${loading?'opacity:0.58;cursor:default;':''}`;
+  return `<div id="leaderboardPanelInner" style="margin-top:16px;text-align:left;"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;"><div style="font-size:18px;font-weight:bold;">${title}</div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><div style="display:flex;gap:6px;">${tabBtn(LEADERBOARD_MODE_SINGLE,t.leaderboardSingleTab)}${tabBtn(LEADERBOARD_MODE_COOP,t.leaderboardCoopTab)}</div><button id="refreshLeaderboardBtn" ${refreshDisabled} style="${refreshStyle}">${refreshLabel}</button></div></div>${body}${syncing}${error}</div>`;
 }
-function bindLeaderboardRefreshButton(){ const refreshLeaderboardBtn=$('refreshLeaderboardBtn'); if(refreshLeaderboardBtn) refreshLeaderboardBtn.onclick=()=>{ if(state.leaderboardLoading) return; loadLeaderboard(true); }; }
+function bindLeaderboardRefreshButton(){
+  const refreshLeaderboardBtn=$('refreshLeaderboardBtn');
+  if(refreshLeaderboardBtn) refreshLeaderboardBtn.onclick=()=>{ if(currentLeaderboardLoading()) return; loadLeaderboard(true, state.leaderboardMode); };
+  document.querySelectorAll('[data-leaderboard-tab]').forEach(btn=>{ btn.onclick=()=>setLeaderboardMode(btn.dataset.leaderboardTab); });
+}
 function refreshLeaderboardPanels(){ document.querySelectorAll('[data-leaderboard-panel]').forEach(panel=>{ panel.innerHTML=leaderboardCardMarkup(); }); bindLeaderboardRefreshButton(); }
 async function supabaseRequest(path, options={}){
   const resp = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -702,19 +761,27 @@ async function supabaseRequest(path, options={}){
   return resp.json();
 }
 function rerenderMenusIfNeeded(){ if(state.loading||uiSetupMode) return; if(state.overlayScreen==='main' || state.overlayScreen==='gameover'){ refreshLeaderboardPanels(); } }
-async function loadLeaderboard(force=false){
-  if(state.leaderboardLoading && !force) return;
-  state.leaderboardLoading=true; state.leaderboardError='';
+async function loadLeaderboard(force=false, mode=state.leaderboardMode){
+  const targetMode = mode===LEADERBOARD_MODE_COOP ? LEADERBOARD_MODE_COOP : LEADERBOARD_MODE_SINGLE;
+  const loadingKey = targetMode===LEADERBOARD_MODE_COOP ? 'leaderboardCoopLoading' : 'leaderboardSingleLoading';
+  const loadedKey = targetMode===LEADERBOARD_MODE_COOP ? 'leaderboardCoopLoaded' : 'leaderboardSingleLoaded';
+  const errorKey = targetMode===LEADERBOARD_MODE_COOP ? 'leaderboardCoopError' : 'leaderboardSingleError';
+  const rowsKey = targetMode===LEADERBOARD_MODE_COOP ? 'leaderboardCoop' : 'leaderboardSingle';
+  if(state[loadingKey] && !force) return;
+  state[loadingKey]=true; state[errorKey]='';
   rerenderMenusIfNeeded();
   try{
-    const rows = await supabaseRequest(`leaderboard?select=player_name,best_score,updated_at&order=best_score.desc,updated_at.asc&limit=${LEADERBOARD_LIMIT}`);
-    state.leaderboard = Array.isArray(rows) ? rows : [];
-    state.leaderboardLoaded = true;
+    const query = targetMode===LEADERBOARD_MODE_COOP
+      ? `coop_leaderboard?select=team_score,player_names,created_at&order=team_score.desc,created_at.asc&limit=${LEADERBOARD_LIMIT}`
+      : `leaderboard?select=player_name,best_score,updated_at&order=best_score.desc,updated_at.asc&limit=${LEADERBOARD_LIMIT}`;
+    const rows = await supabaseRequest(query);
+    state[rowsKey] = Array.isArray(rows) ? rows : [];
+    state[loadedKey] = true;
   }catch(err){
     console.error('Leaderboard load failed', err);
-    state.leaderboardError=T[lang].leaderboardError;
+    state[errorKey]=T[lang].leaderboardError;
   }finally{
-    state.leaderboardLoading=false;
+    state[loadingKey]=false;
     rerenderMenusIfNeeded();
   }
 }
@@ -755,11 +822,27 @@ async function submitLeaderboardScore(score){
       state.best = Math.max(Number(state.best)||0, Number(row.best_score)||0);
     }
     localStorage.setItem('dead_town_supply_v2_best', String(state.best));
-    await loadLeaderboard(true);
+    await loadLeaderboard(true, LEADERBOARD_MODE_SINGLE);
     updateHUD();
   }catch(err){
     console.error('Leaderboard submit failed', err);
-    state.leaderboardError=T[lang].leaderboardError;
+    state.leaderboardSingleError=T[lang].leaderboardError;
+  }finally{
+    state.leaderboardSyncing = false;
+    rerenderMenusIfNeeded();
+  }
+}
+async function submitCoopLeaderboardScore(score, playerNames){
+  const names = sanitizeCoopPlayerNames(playerNames);
+  if(!names.length) return;
+  state.leaderboardSyncing = true;
+  rerenderMenusIfNeeded();
+  try{
+    await supabaseRequest('coop_leaderboard', {method:'POST', headers:{'Prefer':'return=representation'}, body:{team_score:Math.max(0, Math.floor(score||0)), player_names:names}});
+    await loadLeaderboard(true, LEADERBOARD_MODE_COOP);
+  }catch(err){
+    console.error('Co-op leaderboard submit failed', err);
+    state.leaderboardCoopError=T[lang].leaderboardError;
   }finally{
     state.leaderboardSyncing = false;
     rerenderMenusIfNeeded();
@@ -783,7 +866,7 @@ function formatKeybindHint(){
 }
 
 const WORLD={w:3600,h:2400,road:[],buildings:[]};
-const state={running:false,gameOver:false,paused:false,loading:true,loadProgress:0,loadDone:false,vhsTime:0,mouse:{x:SW/2,y:SH/2},mouseVisible:true,keys:new Set(),pellets:[],zombies:[],particles:[],decals:[],pickups:[],grenades:[],explosions:[],airdrops:[],rockets:[],flameParticles:[],fireZones:[],damageTexts:[],wave:1,kills:0,score:0,surviveTime:0,spawnTimer:0,waveTimer:0,screenFlash:0,cameraShake:0,best:Number(localStorage.getItem('dead_town_supply_v2_best')||0),bossSpawned:false,bossAnnouncement:0,airdropAnnouncement:0,buffAnnouncement:'',buffAnnouncementTimer:0,airdropTimer:35,deathAnim:0,time:0,nextBossTime:90,nextEntityId:1,playerName:sanitizePlayerName(localStorage.getItem('dead_town_player_name')||'Player')||'Player',keybinds:{grenade:keyStorageValue('dead_town_keybind_grenade','G'),molotov:keyStorageValue('dead_town_keybind_molotov','F')},devMode:false,menuScreen:'main',deviceMode:null,overlayScreen:'none',leaderboard:[],leaderboardLoading:false,leaderboardError:'',leaderboardLoaded:false,leaderboardSyncing:false};
+const state={running:false,gameOver:false,paused:false,loading:true,loadProgress:0,loadDone:false,vhsTime:0,mouse:{x:SW/2,y:SH/2},mouseVisible:true,keys:new Set(),pellets:[],zombies:[],particles:[],decals:[],pickups:[],grenades:[],explosions:[],airdrops:[],rockets:[],flameParticles:[],fireZones:[],damageTexts:[],wave:1,kills:0,score:0,surviveTime:0,spawnTimer:0,waveTimer:0,screenFlash:0,cameraShake:0,best:Number(localStorage.getItem('dead_town_supply_v2_best')||0),bossSpawned:false,bossAnnouncement:0,airdropAnnouncement:0,buffAnnouncement:'',buffAnnouncementTimer:0,airdropTimer:35,deathAnim:0,time:0,nextBossTime:90,nextEntityId:1,playerName:sanitizePlayerName(localStorage.getItem('dead_town_player_name')||'Player')||'Player',keybinds:{grenade:keyStorageValue('dead_town_keybind_grenade','G'),molotov:keyStorageValue('dead_town_keybind_molotov','F')},devMode:false,menuScreen:'main',deviceMode:null,overlayScreen:'none',leaderboardMode:LEADERBOARD_MODE_SINGLE,leaderboardSingle:[],leaderboardSingleLoading:false,leaderboardSingleError:'',leaderboardSingleLoaded:false,leaderboardCoop:[],leaderboardCoopLoading:false,leaderboardCoopError:'',leaderboardCoopLoaded:false,leaderboardSyncing:false};
 const player={x:WORLD.w/2,y:WORLD.h/2,radius:10,speed:175,speedMul:1,damageMul:1,hp:100,maxHp:100,grenades:1,molotovs:0,shootCooldown:0,reloadTimer:0,wasReloading:false,dashCooldown:0,dashTime:0,dashFacing:0,dashSpinDir:1,faceDir:1,hurtTimer:0,dashVX:0,dashVY:0,rocketJumpTime:0,rocketJumpVX:0,rocketJumpVY:0,knockbackTime:0,knockbackVX:0,knockbackVY:0,weapon:'shotgun',mag:6,magSize:6,gatlingAmmo:0,rocketAmmo:0,flameAmmo:0};
 const SELF_EXPLOSIVE_DAMAGE_MULT=0.125;
 const ROCKET_JUMP_DURATION=0.5;
@@ -914,7 +997,7 @@ function renderMainMenu(){
     const adjustUiBtn=$('adjustUiBtn'); if(adjustUiBtn) adjustUiBtn.onclick=()=>openMobileUISetup(false);
     bindLeaderboardRefreshButton();
       },0);
-  if(!state.leaderboardLoaded && !state.leaderboardLoading) loadLeaderboard();
+  if(!state.leaderboardSingleLoaded && !state.leaderboardSingleLoading) loadLeaderboard(false, LEADERBOARD_MODE_SINGLE);
 }
 function renderKeybindMenu(){
   state.overlayScreen='keybinds';

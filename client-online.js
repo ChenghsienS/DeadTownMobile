@@ -37,7 +37,7 @@
       rooms: 'Public Rooms',
       noRooms: 'No public rooms yet.',
       onlinePreview: 'ONLINE SYNC',
-      onlineNoLeaderboard: 'Online co-op matches do not submit leaderboard scores.',
+      onlineNoLeaderboard: 'Co-op matches upload the final team score to the multiplayer leaderboard.',
       onlineRoomCreated: 'Room created.',
       onlineNeedName: 'Set your player name first.',
       onlineNeedServer: 'Enter the WebSocket server URL first.',
@@ -114,7 +114,7 @@
       rooms: '公共房间',
       noRooms: '还没有公共房间。',
       onlinePreview: '在线同步版',
-      onlineNoLeaderboard: '在线合作模式不会上传排行榜成绩。',
+      onlineNoLeaderboard: '多人合作对局结束后会上传队伍总分到多人排行榜。',
       onlineRoomCreated: '房间已创建。',
       onlineNeedName: '请先设置玩家名字。',
       onlineNeedServer: '请先输入 WebSocket 服务器地址。',
@@ -225,6 +225,7 @@
     remoteSoundSeenProjectileIds: new Set(),
     remoteSoundSeenDashIds: new Set(),
     remoteAudioCooldowns: new Map(),
+    lastCoopLeaderboardUploadKey: '',
   };
   window.deadtownOnline = online;
 
@@ -1323,6 +1324,7 @@
       online.localStateSeq = 0;
       online.lastAckInputSeq = 0;
       online.matchStartAt = performance.now();
+      online.lastCoopLeaderboardUploadKey = '';
       pushOnlineNotice(ot().onlineStartInfo, 'info');
       resetGame();
       state.pellets = [];
@@ -1354,6 +1356,7 @@
     online.seenBloodIds = new Set();
     online.seenSoundIds = new Set();
       online.gameMode = 'single';
+      online.lastCoopLeaderboardUploadKey = '';
       const rawMessage = String(msg.message || '');
       const hostNameMatch = rawMessage.match(/^(.*?)\s(?:disconnected\.|closed the room\.)/i);
       const hostName = hostNameMatch && hostNameMatch[1] ? hostNameMatch[1].trim() : '';
@@ -1395,6 +1398,7 @@
       online.started = false;
       onlineSetSpectating(false);
       online.matchSummary = msg.summary || null;
+      onlineMaybeSubmitCoopLeaderboard(online.matchSummary);
       online.matchOverMessage = msg.message || ot().onlineMatchEnded;
       online.roomState = msg.room || online.roomState;
       online.gameMode = 'online';
@@ -1557,6 +1561,23 @@
     const m = Math.floor(total / 60);
     const s = total % 60;
     return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+
+  function onlineMaybeSubmitCoopLeaderboard(summary){
+    if(!summary || typeof submitCoopLeaderboardScore !== 'function') return;
+    if(!online.roomState || online.clientId !== online.roomState.hostId) return;
+    const players = Array.isArray(summary.players) ? summary.players : [];
+    const playerNames = players.map((p)=>onlineDisplayNameForId(p.id, p.name || 'Player')).filter(Boolean);
+    const cleanNames = Array.from(new Set(playerNames.map((name)=>String(name || '').trim()).filter(Boolean)));
+    if(!cleanNames.length) return;
+    const totalScore = Math.max(0, Math.round(summary.totalScore || 0));
+    const uploadKey = `${totalScore}|${cleanNames.join('|')}`;
+    if(online.lastCoopLeaderboardUploadKey === uploadKey) return;
+    online.lastCoopLeaderboardUploadKey = uploadKey;
+    Promise.resolve(submitCoopLeaderboardScore(totalScore, cleanNames)).catch((err)=>{
+      console.error('Co-op leaderboard submit failed', err);
+    });
   }
 
   function renderOnlineMatchSummary(summary, message){
