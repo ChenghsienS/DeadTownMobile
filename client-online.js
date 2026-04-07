@@ -2288,6 +2288,8 @@
   const __origDrawFog = drawFog;
   let onlineLightCanvas = null;
   let onlineLightCtx = null;
+  let selfLightMaskCanvas = null;
+  let selfLightMaskCtx = null;
 
   function ensureLightingCanvas(){
     if(!onlineLightCanvas || onlineLightCanvas.width !== SW || onlineLightCanvas.height !== SH){
@@ -2297,6 +2299,22 @@
       onlineLightCtx = onlineLightCanvas.getContext('2d');
     }
     return onlineLightCtx;
+  }
+
+  function ensureSelfLightMaskCanvas(){
+    if(!selfLightMaskCanvas || selfLightMaskCanvas.width !== SW || selfLightMaskCanvas.height !== SH){
+      selfLightMaskCanvas = document.createElement('canvas');
+      selfLightMaskCanvas.width = SW;
+      selfLightMaskCanvas.height = SH;
+      selfLightMaskCtx = selfLightMaskCanvas.getContext('2d');
+    }
+    return selfLightMaskCtx;
+  }
+
+  function angleDiff(a, b){
+    let d = (a - b + Math.PI) % (Math.PI * 2);
+    if(d < 0) d += Math.PI * 2;
+    return d - Math.PI;
   }
 
   function localFlashlightAngle(cam){
@@ -2319,77 +2337,23 @@
     return (peer.faceDir||1)<0 ? Math.PI : 0;
   }
 
-  function carveFlashlight(tctx, sx, sy, ang, opts){
-    const length = opts && opts.length || 520;
-    const nearW = opts && opts.nearW || 64;
-    const farW = opts && opts.farW || 250;
-    const halo = opts && opts.halo || 92;
+  function carveFlashlight(tctx,sx,sy,ang,opts){const length=opts&&opts.length||520,nearW=opts&&opts.nearW||64,farW=opts&&opts.farW||250,halo=opts&&opts.halo||92;const widthBoost=1.2,boostedNearW=nearW*widthBoost,boostedFarW=farW*widthBoost,baseHalo=halo*0.6;const haloGrad=tctx.createRadialGradient(sx,sy,6,sx,sy,baseHalo);haloGrad.addColorStop(0,'rgba(0,0,0,1)');haloGrad.addColorStop(0.24,'rgba(0,0,0,0.97)');haloGrad.addColorStop(0.62,'rgba(0,0,0,0.56)');haloGrad.addColorStop(1,'rgba(0,0,0,0)');tctx.fillStyle=haloGrad;tctx.beginPath();tctx.arc(sx,sy,baseHalo,0,Math.PI*2);tctx.fill();tctx.save();tctx.translate(sx,sy);tctx.rotate(ang);const beamWidthScale=1.5,beamFarW=boostedFarW*1.18*beamWidthScale,mouthX=2,mouthHalfH=boostedNearW*0.19*1.16,midX=length*0.44,farX=length,capDepth=length*0.045,midHalfH=beamFarW*0.35,farHalfH=beamFarW*0.50,apertureRx=6.0,apertureRy=mouthHalfH*1.04;const outerGrad=tctx.createLinearGradient(0,0,length,0);outerGrad.addColorStop(0,'rgba(0,0,0,0.58)');outerGrad.addColorStop(0.18,'rgba(0,0,0,0.42)');outerGrad.addColorStop(0.62,'rgba(0,0,0,0.16)');outerGrad.addColorStop(1,'rgba(0,0,0,0)');tctx.fillStyle=outerGrad;tctx.beginPath();tctx.moveTo(mouthX,-mouthHalfH*1.1);tctx.bezierCurveTo(midX*0.18,-midHalfH*0.76,farX-capDepth*1.05,-farHalfH*1.12,farX,-farHalfH*1.1);tctx.quadraticCurveTo(farX+capDepth*0.12,0,farX,farHalfH*1.1);tctx.bezierCurveTo(farX-capDepth*1.05,farHalfH*1.12,midX*0.18,midHalfH*0.76,mouthX,mouthHalfH*1.1);tctx.quadraticCurveTo(-apertureRx,apertureRy*0.9,-apertureRx*1.02,0);tctx.quadraticCurveTo(-apertureRx,-apertureRy*0.9,mouthX,-mouthHalfH*1.1);tctx.closePath();tctx.fill();const softGrad=tctx.createLinearGradient(0,0,length,0);softGrad.addColorStop(0,'rgba(0,0,0,0.82)');softGrad.addColorStop(0.16,'rgba(0,0,0,0.56)');softGrad.addColorStop(0.56,'rgba(0,0,0,0.22)');softGrad.addColorStop(0.94,'rgba(0,0,0,0.03)');softGrad.addColorStop(1,'rgba(0,0,0,0)');tctx.fillStyle=softGrad;tctx.beginPath();tctx.moveTo(mouthX,-mouthHalfH);tctx.bezierCurveTo(midX*0.24,-midHalfH*0.52,farX-capDepth,-farHalfH*0.92,farX,-farHalfH);tctx.quadraticCurveTo(farX+capDepth*0.05,0,farX,farHalfH);tctx.bezierCurveTo(farX-capDepth,farHalfH*0.92,midX*0.24,midHalfH*0.52,mouthX,mouthHalfH);tctx.quadraticCurveTo(-apertureRx*0.85,apertureRy*0.72,-apertureRx,0);tctx.quadraticCurveTo(-apertureRx*0.85,-apertureRy*0.72,mouthX,-mouthHalfH);tctx.closePath();tctx.fill();const coreGrad=tctx.createLinearGradient(0,0,length*0.95,0);coreGrad.addColorStop(0,'rgba(0,0,0,1)');coreGrad.addColorStop(0.08,'rgba(0,0,0,0.98)');coreGrad.addColorStop(0.42,'rgba(0,0,0,0.66)');coreGrad.addColorStop(0.82,'rgba(0,0,0,0.16)');coreGrad.addColorStop(1,'rgba(0,0,0,0)');tctx.fillStyle=coreGrad;tctx.beginPath();tctx.moveTo(mouthX+0.5,-mouthHalfH*0.58);tctx.bezierCurveTo(midX*0.22,-midHalfH*0.40,farX-capDepth*0.75,-farHalfH*0.68,farX,-farHalfH*0.74);tctx.quadraticCurveTo(farX+capDepth*0.03,0,farX,farHalfH*0.74);tctx.bezierCurveTo(farX-capDepth*0.75,farHalfH*0.68,midX*0.22,midHalfH*0.40,mouthX+0.5,mouthHalfH*0.58);tctx.quadraticCurveTo(-apertureRx*0.55,apertureRy*0.48,-apertureRx*0.62,0);tctx.quadraticCurveTo(-apertureRx*0.55,-apertureRy*0.48,mouthX+0.5,-mouthHalfH*0.58);tctx.closePath();tctx.fill();const edgeLift=tctx.createLinearGradient(0,0,length,0);edgeLift.addColorStop(0,'rgba(0,0,0,0.10)');edgeLift.addColorStop(0.22,'rgba(0,0,0,0.06)');edgeLift.addColorStop(0.72,'rgba(0,0,0,0.02)');edgeLift.addColorStop(1,'rgba(0,0,0,0)');tctx.strokeStyle=edgeLift;tctx.lineWidth=Math.max(8,boostedNearW*0.16);tctx.lineCap='round';tctx.beginPath();tctx.moveTo(22,-mouthHalfH*0.88);tctx.bezierCurveTo(midX*0.28,-midHalfH*0.58,farX*0.82,-farHalfH*0.86,farX,-farHalfH*0.84);tctx.stroke();tctx.beginPath();tctx.moveTo(22,mouthHalfH*0.88);tctx.bezierCurveTo(midX*0.28,midHalfH*0.58,farX*0.82,farHalfH*0.86,farX,farHalfH*0.84);tctx.stroke();const hotspot=tctx.createRadialGradient(12,0,2,18,0,boostedNearW*0.78);hotspot.addColorStop(0,'rgba(0,0,0,0.99)');hotspot.addColorStop(0.35,'rgba(0,0,0,0.70)');hotspot.addColorStop(1,'rgba(0,0,0,0)');tctx.fillStyle=hotspot;tctx.beginPath();tctx.ellipse(18,0,boostedNearW*0.72,boostedNearW*0.44,0,0,Math.PI*2);tctx.fill();tctx.restore();}
 
-    const baseHalo = halo * 0.40;
-    const haloGrad = tctx.createRadialGradient(sx, sy, 6, sx, sy, baseHalo);
-    haloGrad.addColorStop(0, 'rgba(0,0,0,0.96)');
-    haloGrad.addColorStop(0.34, 'rgba(0,0,0,0.82)');
-    haloGrad.addColorStop(0.70, 'rgba(0,0,0,0.34)');
-    haloGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    tctx.fillStyle = haloGrad;
-    tctx.beginPath();
-    tctx.arc(sx, sy, baseHalo, 0, Math.PI * 2);
-    tctx.fill();
-
-    tctx.save();
-    tctx.translate(sx, sy);
-    tctx.rotate(ang);
-
-    const beamWidthScale = 1.25;
-    const beamFarW = farW * 1.16 * beamWidthScale;
-    const mouthX = 2;
-    const mouthHalfH = nearW * 0.19 * 1.10;
-    const midX = length * 0.44;
-    const farX = length;
-    const capDepth = length * 0.045;
-    const midHalfH = beamFarW * 0.34;
-    const farHalfH = beamFarW * 0.49;
-    const apertureRx = 5.5;
-    const apertureRy = mouthHalfH * 1.02;
-
-    const softGrad = tctx.createLinearGradient(0, 0, length, 0);
-    softGrad.addColorStop(0, 'rgba(0,0,0,0.70)');
-    softGrad.addColorStop(0.22, 'rgba(0,0,0,0.46)');
-    softGrad.addColorStop(0.70, 'rgba(0,0,0,0.18)');
-    softGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    tctx.fillStyle = softGrad;
-    tctx.beginPath();
-    tctx.moveTo(mouthX, -mouthHalfH);
-    tctx.bezierCurveTo(midX * 0.26, -midHalfH * 0.52, farX - capDepth, -farHalfH * 0.92, farX, -farHalfH);
-    tctx.quadraticCurveTo(farX + capDepth * 0.05, 0, farX, farHalfH);
-    tctx.bezierCurveTo(farX - capDepth, farHalfH * 0.92, midX * 0.26, midHalfH * 0.52, mouthX, mouthHalfH);
-    tctx.quadraticCurveTo(-apertureRx * 0.85, apertureRy * 0.72, -apertureRx, 0);
-    tctx.quadraticCurveTo(-apertureRx * 0.85, -apertureRy * 0.72, mouthX, -mouthHalfH);
-    tctx.closePath();
-    tctx.fill();
-
-    const coreGrad = tctx.createLinearGradient(0, 0, length * 0.95, 0);
-    coreGrad.addColorStop(0, 'rgba(0,0,0,0.98)');
-    coreGrad.addColorStop(0.12, 'rgba(0,0,0,0.88)');
-    coreGrad.addColorStop(0.52, 'rgba(0,0,0,0.38)');
-    coreGrad.addColorStop(0.90, 'rgba(0,0,0,0.08)');
-    coreGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    tctx.fillStyle = coreGrad;
-    tctx.beginPath();
-    tctx.moveTo(mouthX + 0.5, -mouthHalfH * 0.56);
-    tctx.bezierCurveTo(midX * 0.24, -midHalfH * 0.40, farX - capDepth * 0.8, -farHalfH * 0.66, farX, -farHalfH * 0.72);
-    tctx.quadraticCurveTo(farX + capDepth * 0.03, 0, farX, farHalfH * 0.72);
-    tctx.bezierCurveTo(farX - capDepth * 0.8, farHalfH * 0.66, midX * 0.24, midHalfH * 0.40, mouthX + 0.5, mouthHalfH * 0.56);
-    tctx.quadraticCurveTo(-apertureRx * 0.55, apertureRy * 0.48, -apertureRx * 0.62, 0);
-    tctx.quadraticCurveTo(-apertureRx * 0.55, -apertureRy * 0.48, mouthX + 0.5, -mouthHalfH * 0.56);
-    tctx.closePath();
-    tctx.fill();
-
-    tctx.restore();
-  }
-
-
-  function carveRadialLight(tctx, sx, sy, innerR, outerR, strength){
+  function fillProjectedShadow(tctx,startA,startB,farA,farB,alphaStart=1,alphaEnd=0.5){const grad=tctx.createLinearGradient((startA.x+startB.x)*0.5,(startA.y+startB.y)*0.5,(farA.x+farB.x)*0.5,(farA.y+farB.y)*0.5);grad.addColorStop(0,`rgba(0,0,0,${alphaStart})`);grad.addColorStop(0.72,`rgba(0,0,0,${Math.max(alphaEnd,alphaStart*0.62)})`);grad.addColorStop(1,`rgba(0,0,0,${alphaEnd})`);tctx.fillStyle=grad;tctx.beginPath();tctx.moveTo(startA.x,startA.y);tctx.lineTo(farA.x,farA.y);tctx.lineTo(farB.x,farB.y);tctx.lineTo(startB.x,startB.y);tctx.closePath();tctx.fill();}
+function fillStableExtrudedShadow(tctx,sourceSx,sourceSy,startA,startB,shadowLen,alphaStart=1,alphaEnd=0.42,spreadMul=0.94){const midX=(startA.x+startB.x)*0.5,midY=(startA.y+startB.y)*0.5;let dirX=midX-sourceSx,dirY=midY-sourceSy;const dirLen=Math.hypot(dirX,dirY)||1;dirX/=dirLen;dirY/=dirLen;const perpX=-dirY,perpY=dirX;const startHalf=Math.max(2,Math.hypot(startA.x-startB.x,startA.y-startB.y)*0.5);const farHalf=Math.max(startHalf*0.72,Math.min(startHalf*1.05,startHalf+8))*spreadMul;const farMidX=midX+dirX*shadowLen,farMidY=midY+dirY*shadowLen;const farA={x:farMidX+perpX*farHalf,y:farMidY+perpY*farHalf};const farB={x:farMidX-perpX*farHalf,y:farMidY-perpY*farHalf};const grad=tctx.createLinearGradient(midX,midY,farMidX,farMidY);grad.addColorStop(0,`rgba(0,0,0,${alphaStart})`);grad.addColorStop(0.36,`rgba(0,0,0,${Math.max(alphaEnd+0.12,alphaStart*0.74)})`);grad.addColorStop(1,`rgba(0,0,0,${alphaEnd})`);tctx.fillStyle=grad;tctx.beginPath();tctx.moveTo(startA.x,startA.y);tctx.quadraticCurveTo(midX+perpX*startHalf*0.08,midY+perpY*startHalf*0.08,farA.x,farA.y);tctx.quadraticCurveTo(farMidX,farMidY,farB.x,farB.y);tctx.quadraticCurveTo(midX-perpX*startHalf*0.08,midY-perpY*startHalf*0.08,startB.x,startB.y);tctx.closePath();tctx.fill();}
+function fillRectOccluder(tctx,x,y,w,h,pad=3){tctx.fillRect(x-pad,y-pad,w+pad*2,h+pad*2);} 
+function zombieShadowProfile(z){const r=Math.max(8,Number(z&&z.radius||10));if(!z)return{bodyW:r*1.5,bodyH:r*2.0,tailScale:1,baseAlpha:0.18};switch(z.type){case 'boss':return{bodyW:36,bodyH:40,tailScale:1.34,baseAlpha:0.24};case 'charger':return{bodyW:20,bodyH:24,tailScale:1.14,baseAlpha:0.20};case 'bloater':return{bodyW:20,bodyH:24,tailScale:1.06,baseAlpha:0.19};case 'crawler':return{bodyW:16,bodyH:14,tailScale:0.86,baseAlpha:0.17,flat:true};case 'pouncer':return{bodyW:18,bodyH:24,tailScale:1.05,baseAlpha:0.19};default:return{bodyW:14,bodyH:24,tailScale:1.0,baseAlpha:0.18};}}
+function zombieShadowHalfWidth(profile,dirX,dirY){const absX=Math.abs(dirX),absY=Math.abs(dirY);const cross=(profile.bodyW*absY)+(profile.bodyH*absX*0.42);return Math.max(4.5,cross*0.5);}
+function drawZombiePixelPathLocal(tctx,z,pad=0){const rect=(x,y,w,h)=>tctx.rect(Math.round(x-pad),Math.round(y-pad),Math.round(w+pad*2),Math.round(h+pad*2));if(z.type==='boss'){rect(-16,-18,32,22);rect(-18,2,36,18);rect(-18,18,8,10);rect(10,18,8,10);return;}if(z.type==='charger'){rect(-8,-10,16,12);rect(-10,2,20,11);rect(-10,13,5,7);rect(5,13,5,7);rect(-6,-14,12,3);return;}if(z.type==='bloater'){rect(-10,-8,20,16);rect(-8,8,16,8);return;}if(z.type==='crawler'){rect(-8,-4,16,8);rect(-7,4,14,5);return;}rect(-6,-8,12,10);rect(-7,2,14,10);rect(-7,12,4,6);rect(3,12,4,6);if(z.type==='pouncer')rect(-9,-12,18,3);}
+function drawZombiePixelPath(tctx,z,sx,sy,pad=0){tctx.save();tctx.translate(sx,sy);tctx.beginPath();drawZombiePixelPathLocal(tctx,z,pad);tctx.restore();}
+function fillZombieBodyOccluder(tctx,z,sx,sy,pad=1.1){drawZombiePixelPath(tctx,z,sx,sy,pad);tctx.fill();}
+function fillZombieProjectedShadow(tctx,z,sx,sy,shadowAng,farDist){const p=zombieShadowProfile(z),dirX=Math.cos(shadowAng),dirY=Math.sin(shadowAng),perpX=-dirY,perpY=dirX;const startHalf=zombieShadowHalfWidth(p,dirX,dirY);const footOffsetY=Math.max(3.5,p.bodyH*(p.flat?0.34:0.46));const distanceMul=clamp((farDist-120)/540,0.78,1.18);const shadowLen=(p.bodyH*2.55+p.bodyW*0.62+distanceMul*22)*p.tailScale;const farHalf=Math.max(startHalf*0.88,startHalf+Math.min(6,p.bodyW*0.18));const baseAlpha=(p.baseAlpha||0.18)*0.90;const anchorX=sx,anchorY=sy+footOffsetY;const startA={x:anchorX+perpX*startHalf,y:anchorY+perpY*startHalf},startB={x:anchorX-perpX*startHalf,y:anchorY-perpY*startHalf};const endCx=anchorX+dirX*shadowLen,endCy=anchorY+dirY*shadowLen;const farA={x:endCx+perpX*farHalf,y:endCy+perpY*farHalf},farB={x:endCx-perpX*farHalf,y:endCy-perpY*farHalf};const grad=tctx.createLinearGradient(anchorX,anchorY,endCx,endCy);grad.addColorStop(0,`rgba(0,0,0,${baseAlpha.toFixed(3)})`);grad.addColorStop(0.42,`rgba(0,0,0,${(baseAlpha*0.58).toFixed(3)})`);grad.addColorStop(1,'rgba(0,0,0,0)');tctx.fillStyle=grad;tctx.beginPath();tctx.moveTo(startA.x,startA.y);tctx.lineTo(startB.x,startB.y);tctx.lineTo(farB.x,farB.y);tctx.lineTo(farA.x,farA.y);tctx.closePath();tctx.fill();}
+function buildingIntersectsBeam(sourceWorldX,sourceWorldY,beamAng,halfAngle,b,pad=1.02){const corners=[{x:b.x,y:b.y},{x:b.x+b.w,y:b.y},{x:b.x+b.w,y:b.y+b.h},{x:b.x,y:b.y+b.h}].map(pt=>angleDiff(Math.atan2(pt.y-sourceWorldY,pt.x-sourceWorldX),beamAng));let minRel=Infinity,maxRel=-Infinity;for(const rel of corners){if(Math.abs(rel)<=halfAngle+pad)return true;if(rel<minRel)minRel=rel;if(rel>maxRel)maxRel=rel;}return minRel<halfAngle+pad&&maxRel>-(halfAngle+pad);} 
+function getBuildingShadowEdges(sourceWorldX,sourceWorldY,b){const cx=b.x+b.w*0.5,cy=b.y+b.h*0.5,rx=(sourceWorldX-cx)/Math.max(1,b.w*0.5),ry=(sourceWorldY-cy)/Math.max(1,b.h*0.5);let front;if(Math.abs(rx)>=Math.abs(ry)) front=sourceWorldX<cx?'left':'right'; else front=sourceWorldY<cy?'top':'bottom';const edges=[];if(front!=='left') edges.push([{x:b.x,y:b.y},{x:b.x,y:b.y+b.h}]);if(front!=='right') edges.push([{x:b.x+b.w,y:b.y},{x:b.x+b.w,y:b.y+b.h}]);if(front!=='top') edges.push([{x:b.x,y:b.y},{x:b.x+b.w,y:b.y}]);if(front!=='bottom') edges.push([{x:b.x,y:b.y+b.h},{x:b.x+b.w,y:b.y+b.h}]);return edges;}
+function fillBuildingProjectedShadow(tctx,cam,sourceWorldX,sourceWorldY,b,baseLen){const edges=getBuildingShadowEdges(sourceWorldX,sourceWorldY,b);const sourceSx=Math.round(sourceWorldX-cam.x),sourceSy=Math.round(sourceWorldY-cam.y);const cx=b.x+b.w*0.5,cy=b.y+b.h*0.5,dist=Math.hypot(cx-sourceWorldX,cy-sourceWorldY),rectR=Math.hypot(b.w*0.5,b.h*0.5);for(const edge of edges){const startA=worldToScreen(edge[0].x,edge[0].y,cam),startB=worldToScreen(edge[1].x,edge[1].y,cam);let dirAx=startA.x-sourceSx,dirAy=startA.y-sourceSy,dirBx=startB.x-sourceSx,dirBy=startB.y-sourceSy;const lenA=Math.hypot(dirAx,dirAy)||1,lenB=Math.hypot(dirBx,dirBy)||1;dirAx/=lenA;dirAy/=lenA;dirBx/=lenB;dirBy/=lenB;const shadowLen=Math.max(baseLen*1.34,Math.min(baseLen*2.22,dist*1.22+rectR*3.05+188));const farA={x:startA.x+dirAx*shadowLen,y:startA.y+dirAy*shadowLen};const farB={x:startB.x+dirBx*shadowLen,y:startB.y+dirBy*shadowLen};const midX=(startA.x+startB.x)*0.5,midY=(startA.y+startB.y)*0.5,farMidX=(farA.x+farB.x)*0.5,farMidY=(farA.y+farB.y)*0.5;const grad=tctx.createLinearGradient(midX,midY,farMidX,farMidY);grad.addColorStop(0,'rgba(0,0,0,0.84)');grad.addColorStop(0.34,'rgba(0,0,0,0.68)');grad.addColorStop(0.74,'rgba(0,0,0,0.34)');grad.addColorStop(1,'rgba(0,0,0,0.10)');tctx.fillStyle=grad;tctx.beginPath();tctx.moveTo(startA.x,startA.y);tctx.lineTo(startB.x,startB.y);tctx.lineTo(farB.x,farB.y);tctx.lineTo(farA.x,farA.y);tctx.closePath();tctx.fill();}}
+function applyZombieBodyShadows(tctx,cam,lightSources){return;}
+function carveLocalFlashlightOcclusion(maskCtx,cam,sx,sy,beamAng,opts){const length=opts&&opts.length||560,farW=opts&&opts.farW||230,halfAngle=Math.atan2((farW*0.76*1.28),Math.max(1,length)),maxDist=length+220,baseShadowLen=length*1.26,margin=0.72,sourceWorldX=opts&&Number.isFinite(opts.sourceWorldX)?opts.sourceWorldX:player.x,sourceWorldY=opts&&Number.isFinite(opts.sourceWorldY)?opts.sourceWorldY:player.y;maskCtx.fillStyle='rgba(0,0,0,1)';let insideBuilding=null;for(const b of WORLD.buildings||[]){if(pointInsideBuildingInterior(sourceWorldX,sourceWorldY,b)){insideBuilding=b;break;}}if(!insideBuilding){for(const b of WORLD.buildings||[]){const roofVisible=(b.roofAlpha||0)>0.58;if(!roofVisible)continue;const cx=b.x+b.w*0.5,cy=b.y+b.h*0.5,dist=Math.hypot(cx-sourceWorldX,cy-sourceWorldY),approxR=Math.hypot(b.w*0.5,b.h*0.5);if(dist>maxDist+approxR)continue;if(!buildingIntersectsBeam(sourceWorldX,sourceWorldY,beamAng,halfAngle,b,1.18))continue;const screenRect=worldToScreen(b.x,b.y,cam);fillRectOccluder(maskCtx,screenRect.x,screenRect.y,b.w,b.h,2.5);fillBuildingProjectedShadow(maskCtx,cam,sourceWorldX,sourceWorldY,b,baseShadowLen);}}for(const z of state.zombies||[]){if(!z||z.dead||z.hp<=0)continue;const radius=Math.max(8,Number(z.radius||10)),dx=z.x-sourceWorldX,dy=z.y-sourceWorldY,dist=Math.hypot(dx,dy);if(dist>maxDist+radius)continue;const centerAng=Math.atan2(dy,dx),tangentHalf=Math.asin(Math.min(0.98,(radius+10)/Math.max(dist,radius+10)));if(Math.abs(angleDiff(centerAng,beamAng))>halfAngle+tangentHalf+margin)continue;const zx=Math.round(sx+dx),zy=Math.round(sy+dy);if(dist>Math.max(8,radius*0.18))fillZombieProjectedShadow(maskCtx,z,zx,zy,centerAng,baseShadowLen*1.04);}if(insideBuilding){const pad=0;const interiorX=Math.round(insideBuilding.x-cam.x+pad),interiorY=Math.round(insideBuilding.y-cam.y+pad),interiorW=Math.max(0,Math.round(insideBuilding.w-pad*2)),interiorH=Math.max(0,Math.round(insideBuilding.h-pad*2));if(interiorW>0&&interiorH>0){maskCtx.save();maskCtx.globalCompositeOperation='destination-in';maskCtx.beginPath();maskCtx.rect(interiorX,interiorY,interiorW,interiorH);maskCtx.fill();maskCtx.restore();}}}
+function carveRadialLight(tctx, sx, sy, innerR, outerR, strength){
     const s = Math.max(0, Math.min(1, strength == null ? 1 : strength));
     const grad = tctx.createRadialGradient(sx, sy, Math.max(0, innerR), sx, sy, Math.max(innerR + 1, outerR));
     grad.addColorStop(0, `rgba(0,0,0,${(0.98 * s).toFixed(3)})`);
@@ -2444,6 +2408,7 @@
       carveRadialLight(tctx, s.x, s.y, 1, Math.max(14, (f.size || 5) * 4.0), 0.42);
     }
   }
+
   drawFog = function(cam){
     const tctx = ensureLightingCanvas();
     tctx.clearRect(0,0,SW,SH);
@@ -2454,12 +2419,22 @@
     vignette.addColorStop(1, 'rgba(0,0,0,0.55)');
     tctx.fillStyle = vignette;
     tctx.fillRect(0,0,SW,SH);
+
+    const lightSources = [];
     tctx.globalCompositeOperation = 'destination-out';
 
     const selfLightEnabled = !state.gameOver && state.deathAnim <= 0 && !(online.connected && online.started && onlineIsMode() && (online.selfDead || online.spectating));
     if(selfLightEnabled){
+      const maskCtx = ensureSelfLightMaskCanvas();
+      maskCtx.clearRect(0,0,SW,SH);
       const selfPos = worldToScreen(player.x, player.y, cam);
-      carveFlashlight(tctx, selfPos.x, selfPos.y, localFlashlightAngle(cam), { length: 560, nearW: 60, farW: 230, halo: 96 });
+      const selfAng = localFlashlightAngle(cam);
+      carveFlashlight(maskCtx, selfPos.x, selfPos.y, selfAng, { length: 560, nearW: 60, farW: 230, halo: 96 });
+      maskCtx.globalCompositeOperation = 'destination-out';
+      carveLocalFlashlightOcclusion(maskCtx, cam, selfPos.x, selfPos.y, selfAng, { length: 560, farW: 230, sourceWorldX: player.x, sourceWorldY: player.y });
+      maskCtx.globalCompositeOperation = 'source-over';
+      tctx.drawImage(selfLightMaskCanvas, 0, 0);
+      lightSources.push({ x: player.x, y: player.y, ang: selfAng, length: 560, halfAngle: Math.atan2((230*0.76*1.22), 560) });
     }
 
     if(online.connected && online.started && onlineIsMode()){
@@ -2468,13 +2443,22 @@
         const pxv = Number.isFinite(peer.displayX) ? peer.displayX : (peer.x || 0);
         const pyv = Number.isFinite(peer.displayY) ? peer.displayY : (peer.y || 0);
         const s = worldToScreen(pxv, pyv, cam);
-        carveFlashlight(tctx, s.x, s.y, peerFlashlightAngle(peer), { length: 560, nearW: 60, farW: 230, halo: 88 });
+        const ang = peerFlashlightAngle(peer);
+        const maskCtx = ensureSelfLightMaskCanvas();
+        maskCtx.clearRect(0,0,SW,SH);
+        carveFlashlight(maskCtx, s.x, s.y, ang, { length: 560, nearW: 62, farW: 240, halo: 96 });
+        maskCtx.globalCompositeOperation = 'destination-out';
+        carveLocalFlashlightOcclusion(maskCtx, cam, s.x, s.y, ang, { length: 560, farW: 240, sourceWorldX: pxv, sourceWorldY: pyv });
+        maskCtx.globalCompositeOperation = 'source-over';
+        tctx.drawImage(selfLightMaskCanvas, 0, 0);
+        lightSources.push({ x: pxv, y: pyv, ang, length: 560, halfAngle: Math.atan2((240*0.76*1.22), 560) });
       }
     }
 
     carveProjectileLights(tctx, cam);
-    if(online.connected && online.started && onlineIsMode()) for(const tomb of (online.tombstones||[])) drawTombstoneAt(tomb, cam);
     tctx.globalCompositeOperation = 'source-over';
+    applyZombieBodyShadows(tctx, cam, lightSources);
+    if(online.connected && online.started && onlineIsMode()) for(const tomb of (online.tombstones||[])) drawTombstoneAt(tomb, cam);
     ctx.drawImage(onlineLightCanvas, 0, 0);
   };
 
